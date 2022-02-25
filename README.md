@@ -1,53 +1,26 @@
-# Computertest
+# Adabots
 
-A ComputerCraft-inspired mod for Minetest!
+This fork of [computertest](https://github.com/zaners123/Computertest) allows you to run [Adabots](https://github.com/TamaMcGlinn/AdaBots) using minetest instead of minecraft.
+I have also done a few fixes as necessary to get the [ComputerCraft turtle API](https://tweaked.cc/module/turtle.html) working.
 
-![Computertest](banner.png)
+After installing, go to Settings > All Settings and search for "secure", in order to set httpmods to include `computertest` (not adabots - I am too lazy to rename everything).
+
+Then give yourself a turtle, place it and right click it. In the command window, enter `turtle:listen()` to start listening on the default server/port/tickrate.
+
+turtle:listen takes three parameters:
+- ip address (defaults to "localhost")
+- port (defaults to "7112")
+- tickrate in seconds (defaults to 0.3)
+
+Another example call to put in the turtle's command window would be `turtle:listen("192.168.0.22", "7112", 0.1)`
+to get a faster turtle listening to a different machine on your LAN.
 
 ## Working Features
 
-- LUA can be uploaded and ran on a turtle. See the [API](API.md) and the [examples](/examples/EXAMPLES.md)
-- The turtle can do actions like mining, moving, turning, inventory management, and more!
-- A "computertest" privilege, to limit turtle usage to trusted users (so only users with this privilege can use/edit turtles) 
-- Turtles consume fuel after completing hard actions such as mining (configurable)
+- Movement, mining and placing works
 
-## An example of how to use this mod
+## Features to Add
 
-1. Install the ComputerTest mod
-2. Get a turtle block using either
-    - The command `/giveme computertest:turtle`
-    - The creative menu
-    - The recipe
-  ```
-III
-ICI
-IMI
-I = Steel Ingot , C = Chest , M = Mesa Block
-```
-3. Place the turtle
-4. Right click it and click "Upload Code"
-5. Paste this into the large field (sometimes Minetest requires you to paste twice) and click "Upload Code"
-```lua
-function init(turtle)
-    while true do
-        turtle:moveForward()
-        turtle:turnRight()
-    end
-end
-```   
-6. Watch as it spins around!
-
-## Other Information
-
-The [API.md](API.md) contains important documentation for programming.
-
-[EXAMPLES.md](examples/EXAMPLES.md) contains some fun examples 
-
-## Changes are Welcome!
-
-Anyone interested in adding these features can! in entity/turtle.lua, I'd be interested in any great working pull requests!
-
-### Features to Add
-
+- Selecting an inventory slot
 - Inventory management commands, such as crafting and sorting
 - The turtle code isn't sandboxed, so turtles could call dangerous functions. This has been mitigated by the "computertest" privilege, but proper sandboxing would work best.

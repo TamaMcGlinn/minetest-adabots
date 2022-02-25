@@ -198,18 +198,17 @@ function TurtleEntity:mine(nodeLocation)
     self:yield("Mining",true)
     return true
 end
-function TurtleEntity:build(nodeLocation, turtleslot)
+function TurtleEntity:build(nodeLocation)
     if nodeLocation == nil then return false end
-    if not isValidInventoryIndex(turtleslot) then return false end
 
     local node = minetest.get_node(nodeLocation)
     if node.name~="air" then return false end
 
     --Build and consume item
-    local stack = self:getTurtleslot("main", turtleslot)
+    local stack = self:getTurtleslot(self.selected_slot)
     if stack:is_empty() then return false end
-    local newstack, position_placed = minetest.item_place_node(stack, nil, { type="node", under=nodeLocation, above=self:get_pos()})
-    self.inv:set_stack("main", turtleslot,newstack)
+    local newstack, position_placed = minetest.item_place_node(stack, nil, { type="node", under=nodeLocation, above=self:getLoc()})
+    self.inv:set_stack("main", self.selected_slot, newstack) -- consume item
 
     if position_placed == nil then
         self:yield("Building")
@@ -371,6 +370,7 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     self.previous_answers = data.previous_answers or {}
     self.coroutine = data.coroutine or nil
     self.fuel = data.fuel or computertest.config.fuel_initial
+    self.selected_slot = data.selected_slot or 1
     self.autoRefuel = data.autoRefuel or true
     self.codeUncompiled = data.codeUncompiled or ""
 
@@ -411,6 +411,7 @@ function TurtleEntity:get_staticdata()
         previous_answers = self.previous_answers,
         coroutine = nil,--self.coroutine,
         fuel = self.fuel,
+        selected_slot = self.selected_slot,
         autoRefuel = self.autoRefuel,
         inv = serializeInventory(self.inv),
         codeUncompiled = self.codeUncompiled,
@@ -446,6 +447,7 @@ function TurtleEntity:setHeading(heading)
         self.object:set_yaw(self.heading * 3.14159265358979323/2)
         self:yield("Turning",true)
     end
+    return true
 end
 function TurtleEntity:getHeading() return self.heading end
 function TurtleEntity:turnLeft()    return self:setHeading(self:getHeading()+1) end
@@ -458,26 +460,18 @@ function TurtleEntity:getLocDown()     return self:getLocRelative(0,-1,0) end
 function TurtleEntity:getLocRight()    return self:getLocRelative(0,0, 1) end
 function TurtleEntity:getLocLeft()     return self:getLocRelative(0,0,-1) end
 
-function TurtleEntity:buildForward(turtleslot)    return self:build(self:getLocForward()    ,turtleslot) end
-function TurtleEntity:buildBackward(turtleslot)   return self:build(self:getLocBackward()   ,turtleslot) end
-function TurtleEntity:buildUp(turtleslot)         return self:build(self:getLocUp()         ,turtleslot) end
-function TurtleEntity:buildDown(turtleslot)       return self:build(self:getLocDown()       ,turtleslot) end
-function TurtleEntity:buildRight(turtleslot)      return self:build(self:getLocRight()      ,turtleslot) end
-function TurtleEntity:buildLeft(turtleslot)       return self:build(self:getLocLeft()       ,turtleslot) end
+function TurtleEntity:place()    return self:build(self:getLocForward()) end
+function TurtleEntity:placeUp()         return self:build(self:getLocUp()) end
+function TurtleEntity:placeDown()       return self:build(self:getLocDown()) end
 
-function TurtleEntity:moveForward()  return self:move(self:getLocForward()  ) end
-function TurtleEntity:moveBackward() return self:move(self:getLocBackward() ) end
-function TurtleEntity:moveUp()       return self:move(self:getLocUp()       ) end
-function TurtleEntity:moveDown()     return self:move(self:getLocDown()     ) end
-function TurtleEntity:moveRight()    return self:move(self:getLocRight()    ) end
-function TurtleEntity:moveLeft()     return self:move(self:getLocLeft()     ) end
+function TurtleEntity:forward()  return self:move(self:getLocForward()  ) end
+function TurtleEntity:back() return self:move(self:getLocBackward() ) end
+function TurtleEntity:up()       return self:move(self:getLocUp()       ) end
+function TurtleEntity:down()     return self:move(self:getLocDown()     ) end
 
-function TurtleEntity:mineForward()     return self:mine(self:getLocForward()   ) end
-function TurtleEntity:mineBackward()    return self:mine(self:getLocBackward()  ) end
-function TurtleEntity:mineUp()          return self:mine(self:getLocUp()        ) end
-function TurtleEntity:mineDown()        return self:mine(self:getLocDown()      ) end
-function TurtleEntity:mineRight()       return self:mine(self:getLocRight()     ) end
-function TurtleEntity:mineLeft()        return self:mine(self:getLocLeft()      ) end
+function TurtleEntity:dig()     return self:mine(self:getLocForward()   ) end
+function TurtleEntity:digUp()          return self:mine(self:getLocUp()        ) end
+function TurtleEntity:digDown()        return self:mine(self:getLocDown()      ) end
 
 function TurtleEntity:scanForward()     return self:scan(self:getLocForward()   ) end
 function TurtleEntity:scanBackward()    return self:scan(self:getLocBackward()  ) end
@@ -513,6 +507,57 @@ function TurtleEntity:itemPushTurtleslotUp      (turtleslot, listname)      retu
 function TurtleEntity:itemPushTurtleslotDown    (turtleslot, listname)      return self:itemPushTurtleslot(self:getLocDown()       , turtleslot, listname) end
 function TurtleEntity:itemPushTurtleslotRight   (turtleslot, listname)      return self:itemPushTurtleslot(self:getLocRight()      , turtleslot, listname) end
 function TurtleEntity:itemPushTurtleslotLeft    (turtleslot, listname)      return self:itemPushTurtleslot(self:getLocLeft()       , turtleslot, listname) end
+
+-- begin Adabots changes; all changes relating to adabots in here, to make it easier to later split into separate CC and Adabots mods
+
+function TurtleEntity:stopListen()
+  self.adabots_server = ""
+end
+
+local function update_adabots(self)
+  if self.adabots_server == "" then
+    return
+  end
+  http_api.fetch({
+    url = self.adabots_server,
+    timeout = 1
+  }, function (res)
+    if res.succeeded then
+      -- local command = res.data
+      local command = res.data:gsub("^turtle.", "self:")
+      local functor = loadstring("return function(self) return " .. command .. " end")
+      local result = nil
+      if functor then
+        local turtle_functor = functor()
+        local val = turtle_functor(self)
+        if val ~= nil then
+          result = tostring(val)
+        else
+          result = "nil"
+        end
+      else
+        result = "error: invalid lua expression " .. command
+      end
+      print(command .. " returned " .. result)
+
+      http_api.fetch({ url = self.adabots_server .. "/return_value/" .. result, timeout = 1 }, function (_) end)
+    end
+
+    if self.adabots_server ~= "" then
+      minetest.after(self.adabots_period, function () update_adabots(self) end)
+    end
+  end)
+end
+
+function TurtleEntity:listen(host, ip, period)
+  host = host or "localhost"
+  ip = ip or "7112"
+  self.adabots_server = "http://" .. host .. ":" .. ip
+  self.adabots_period = period or 0.3
+  update_adabots(self)
+end
+
+-- end Adabots changes; all changes relating to adabots in here, to make it easier to later split into separate CC and Adabots mods
 
 function TurtleEntity:yield(reason,useFuel)
     -- Yield at least once

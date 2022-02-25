@@ -14,6 +14,13 @@ computertest = {
     num_turtles = 0,
 }
 local modpath = minetest.get_modpath("computertest")
+
+http_api = minetest.request_http_api()
+
+if http_api == nil then
+  print("ERROR: HTTP disabled. In minetest Settings > All Settings > HTTP mods, list adabots")
+end
+
 dofile(modpath.."/block/turtle.lua")
 dofile(modpath.."/entity/turtle.lua")
 minetest.register_privilege("computertest", {
