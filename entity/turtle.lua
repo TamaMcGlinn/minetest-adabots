@@ -326,13 +326,16 @@ function TurtleEntity:upload_code_to_turtle(player, code_string,run_for_result)
 end
 --MAIN TURTLE USER INTERFACE------------------------------------------
 function TurtleEntity:get_formspec_inventory()
+    local selected_y = math.floor((self.selected_slot - 1) / 4) + 1
+    local selected_x = ((self.selected_slot - 1) % 4) + 8
     return "size[12,5;]"
             .."button[0,0;2,1;open_terminal;Open Terminal]"
             .."button[2,0;2,1;upload_code;Upload Code]"
             .."button[4,0;2,1;factory_reset;Factory Reset]"
             .."set_focus[open_terminal;true]"
             .."list[".. self.inv_fullname..";main;8,1;4,4;]"
-            .."background[8,1;1,1;computertest_inventory.png]"
+            .."background[" .. selected_x .. "," .. selected_y .. ";1,1;computertest_inventory.png]"
+            .."background[7.975,1;0.05,4;computertest_inventory.png]" -- reusing the same white texture for a vertical divider
             .."list[current_player;main;0,1;8,4;]";
 end
 function TurtleEntity:get_formspec_terminal()
@@ -468,6 +471,17 @@ function TurtleEntity:forward()  return self:move(self:getLocForward()  ) end
 function TurtleEntity:back() return self:move(self:getLocBackward() ) end
 function TurtleEntity:up()       return self:move(self:getLocUp()       ) end
 function TurtleEntity:down()     return self:move(self:getLocDown()     ) end
+
+function TurtleEntity:select(slot)
+  if isValidInventoryIndex(slot) then
+    self.selected_slot = slot;
+    return true
+  else
+    return false
+  end
+end
+
+function TurtleEntity:getSelectedSlot()  return self.selected_slot end
 
 function TurtleEntity:dig()     return self:mine(self:getLocForward()   ) end
 function TurtleEntity:digUp()          return self:mine(self:getLocUp()        ) end
