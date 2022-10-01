@@ -172,7 +172,7 @@ function TurtleEntity:move(nodeLocation)
         return false
     end
     --Take Action
-    self.object:set_pos(nodeLocation)
+    self.object:move_to(nodeLocation,true)
     self:yield("Moving",true)
     return true
 end
