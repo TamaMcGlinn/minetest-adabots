@@ -1,18 +1,18 @@
 
-local FORMNAME_TURTLE_INVENTORY = "computertest:turtle:inventory:"
-local FORMNAME_TURTLE_NOPRIV    = "computertest:turtle:nopriv:"
-local FORMNAME_TURTLE_TERMINAL  = "computertest:turtle:terminal:"
-local FORMNAME_TURTLE_UPLOAD    = "computertest:turtle:upload:"
+local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
+local FORMNAME_TURTLE_NOPRIV    = "adabots:turtle:nopriv:"
+local FORMNAME_TURTLE_TERMINAL  = "adabots:turtle:terminal:"
+local FORMNAME_TURTLE_UPLOAD    = "adabots:turtle:upload:"
 
-local FORM_NOPRIV = "size[9,1;]label[0,0;You do not have the 'computertest' privilege.\nThis is required for interacting with turtles.]";
+local FORM_NOPRIV = "size[9,1;]label[0,0;You do not have the 'adabots' privilege.\nThis is required for interacting with turtles.]";
 
 local TURTLE_INVENTORYSIZE = 4*4
 
 ---@returns TurtleEntity of that ID
-local function getTurtle(id) return computertest.turtles[id] end
+local function getTurtle(id) return adabots.turtles[id] end
 ---@returns true
 local function isValidInventoryIndex(index) return 0 < index and index <= TURTLE_INVENTORYSIZE end
-local function has_computertest_priv(player) return minetest.check_player_privs(player,"computertest") end
+local function has_adabots_priv(player) return minetest.check_player_privs(player,"adabots") end
 ---@param item string
 ---@param filterList table of strings
 ---@param isWhitelist boolean true=whitelist filtering, false=blacklist filtering
@@ -99,8 +99,8 @@ end)
 local timer = 0
 minetest.register_globalstep(function(dtime)
     timer = timer + dtime
-    while (timer >= computertest.config.turtle_tick) do
-        for _,turtle in pairs(computertest.turtles) do
+    while (timer >= adabots.config.turtle_tick) do
+        for _,turtle in pairs(adabots.turtles) do
             if turtle.coroutine then
                 if coroutine.status(turtle.coroutine)=="suspended" then
 
@@ -127,7 +127,7 @@ minetest.register_globalstep(function(dtime)
                 --minetest.log("turtle #"..id.." has no coroutine or code, who cares...")
             end
         end
-        timer = timer - computertest.config.turtle_tick
+        timer = timer - adabots.config.turtle_tick
     end
 end)
 --Code responsible for generating turtle entity and turtle interface
@@ -143,12 +143,12 @@ local TurtleEntity = {
         visual_size = { x = 0.9, y = 0.9 },
         static_save = true, -- Make sure it gets saved statically
         textures = {
-            "computertest_top.png",
-            "computertest_bottom.png",
-            "computertest_right.png",
-            "computertest_left.png",
-            "computertest_back.png",
-            "computertest_front.png",
+            "adabots_top.png",
+            "adabots_bottom.png",
+            "adabots_right.png",
+            "adabots_left.png",
+            "adabots_back.png",
+            "adabots_front.png",
         },
         automatic_rotate = 0,
         id = -1
@@ -305,8 +305,8 @@ end
 ---
 function TurtleEntity:upload_code_to_turtle(player, code_string,run_for_result)
     --Check permissions
-    if not has_computertest_priv(player) then
-        --minetest.debug(player:get_player_name().." does not have computertest priv")
+    if not has_adabots_priv(player) then
+        --minetest.debug(player:get_player_name().." does not have adabots priv")
         return false
     end
     local function sandbox(code)
@@ -334,8 +334,8 @@ function TurtleEntity:get_formspec_inventory()
             .."button[4,0;2,1;factory_reset;Factory Reset]"
             .."set_focus[open_terminal;true]"
             .."list[".. self.inv_fullname..";main;8,1;4,4;]"
-            .."background[" .. selected_x .. "," .. selected_y .. ";1,1;computertest_inventory.png]"
-            .."background[7.975,1;0.05,4;computertest_inventory.png]" -- reusing the same white texture for a vertical divider
+            .."background[" .. selected_x .. "," .. selected_y .. ";1,1;adabots_inventory.png]"
+            .."background[7.975,1;0.05,4;adabots_inventory.png]" -- reusing the same white texture for a vertical divider
             .."list[current_player;main;0,1;8,4;]";
 end
 function TurtleEntity:get_formspec_terminal()
@@ -365,20 +365,20 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     local data = minetest.deserialize(staticdata)
     if type(data) ~= "table" or not data.complete then data = {} end
     --Give ID
-    computertest.num_turtles = computertest.num_turtles+1
-    self.id = computertest.num_turtles
+    adabots.num_turtles = adabots.num_turtles+1
+    self.id = adabots.num_turtles
     self.name = data.name or "Unnamed #"..self.id
     --self.owner = minetest.get_meta(pos):get_string("owner")
     self.heading = data.heading or 0
     self.previous_answers = data.previous_answers or {}
     self.coroutine = data.coroutine or nil
-    self.fuel = data.fuel or computertest.config.fuel_initial
+    self.fuel = data.fuel or adabots.config.fuel_initial
     self.selected_slot = data.selected_slot or 1
     self.autoRefuel = data.autoRefuel or true
     self.codeUncompiled = data.codeUncompiled or ""
 
     --Give her an inventory
-    self.inv_name = "computertest:turtle:".. self.id
+    self.inv_name = "adabots:turtle:".. self.id
     self.inv_fullname = "detached:".. self.inv_name
     self.inv = minetest.create_detached_inventory(self.inv_name,{})
     if self.inv == nil or self.inv == false then
@@ -392,13 +392,13 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     self.inv:set_size("main", TURTLE_INVENTORYSIZE)
 
     -- Add to turtle list
-    computertest.turtles[self.id] = self
+    adabots.turtles[self.id] = self
 end
 function TurtleEntity:on_rightclick(clicker)
     if not clicker or not clicker:is_player() then
         return
     end
-    if not has_computertest_priv(clicker) then
+    if not has_adabots_priv(clicker) then
         minetest.show_formspec(clicker:get_player_name(),FORMNAME_TURTLE_NOPRIV,FORM_NOPRIV);
         return
     end
@@ -678,7 +678,7 @@ function TurtleEntity:itemRefuel(turtleslot)
             minetest.item_drop(replacements[1], nil, drop_pos)
         end
     end
-    self.fuel = self.fuel + fuel.time * computertest.config.fuel_multiplier
+    self.fuel = self.fuel + fuel.time * adabots.config.fuel_multiplier
     self:yield("Fueling")
     return true
 end
@@ -701,8 +701,8 @@ function TurtleEntity:setName(name)
 end
 
 function TurtleEntity:debug(string)
-    if computertest.config.debug then
-        minetest.debug("computertest turtle #"..self.id..": "..string)
+    if adabots.config.debug then
+        minetest.debug("adabots turtle #"..self.id..": "..string)
     end
 end
 function TurtleEntity:dump(object) return dump(object) end
@@ -711,4 +711,4 @@ function TurtleEntity:dump(object) return dump(object) end
 --    MAIN TURTLE INTERFACE END---------------------------------------
 --    MAIN TURTLE INTERFACE END---------------------------------------
 
-minetest.register_entity("computertest:turtle", TurtleEntity)
+minetest.register_entity("adabots:turtle", TurtleEntity)

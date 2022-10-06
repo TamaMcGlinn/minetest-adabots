@@ -1,4 +1,4 @@
-# ComputerTest API
+# adabots API
 
 This api is two parts, with notes/documentation above, and functions below.
 

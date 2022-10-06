@@ -1,15 +1,15 @@
 --[[
     The turtle block is only used to spawn the turtle entity, then it deletes itself
 ]]
-minetest.register_node("computertest:turtle", {
+minetest.register_node("adabots:turtle", {
     description = "Turtle",
     tiles = {
-        "computertest_top.png",
-        "computertest_bottom.png",
-        "computertest_right.png",
-        "computertest_left.png",
-        "computertest_back.png",
-        "computertest_front.png",
+        "adabots_top.png",
+        "adabots_bottom.png",
+        "adabots_right.png",
+        "adabots_left.png",
+        "adabots_back.png",
+        "adabots_front.png",
     },
     groups = {oddly_breakable_by_hand=2},
     paramtype2 = "facedir",
@@ -20,13 +20,13 @@ minetest.register_node("computertest:turtle", {
         end
     end,
     on_construct = function(pos)
-        local turtle = minetest.add_entity(pos,"computertest:turtle")
+        local turtle = minetest.add_entity(pos,"adabots:turtle")
         turtle = turtle:get_luaentity()
         minetest.remove_node(pos)
     end,
 })
 minetest.register_craft({
-    output = 'computertest:turtle',
+    output = 'adabots:turtle',
     recipe = {
         {'default:steel_ingot', 'default:steel_ingot', 'default:steel_ingot'},
         {'default:steel_ingot', 'default:chest',       'default:steel_ingot'},

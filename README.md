@@ -3,7 +3,7 @@
 This fork of [computertest](https://github.com/zaners123/Computertest) allows you to run [Adabots](https://github.com/TamaMcGlinn/AdaBots) using minetest instead of minecraft.
 I have also done a few fixes as necessary to get the [ComputerCraft turtle API](https://tweaked.cc/module/turtle.html) working.
 
-After installing, go to Settings > All Settings and search for "secure", in order to set httpmods to include `computertest` (not adabots - I am too lazy to rename everything).
+After installing, go to Settings > All Settings and search for "secure", in order to set httpmods to include `adabots`.
 
 Then give yourself a turtle, place it and right click it. In the command window, enter `turtle:listen()` to start listening on the default server/port/tickrate.
 
@@ -23,4 +23,4 @@ to get a faster turtle listening to a different machine on your LAN.
 
 - Selecting an inventory slot
 - Inventory management commands, such as crafting and sorting
-- The turtle code isn't sandboxed, so turtles could call dangerous functions. This has been mitigated by the "computertest" privilege, but proper sandboxing would work best.
+- The turtle code isn't sandboxed, so turtles could call dangerous functions. This has been mitigated by the "adabots" privilege, but proper sandboxing would work best.

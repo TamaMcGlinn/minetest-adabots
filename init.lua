@@ -1,4 +1,4 @@
-computertest = {
+adabots = {
     config = {
         --Turtles are yielded after calling long events, and resumed this often (in seconds)
         --This is how long timed turtle actions take, such as mining, moving, and placing
@@ -13,7 +13,7 @@ computertest = {
     turtles = {},
     num_turtles = 0,
 }
-local modpath = minetest.get_modpath("computertest")
+local modpath = minetest.get_modpath("adabots")
 
 http_api = minetest.request_http_api()
 
@@ -23,6 +23,6 @@ end
 
 dofile(modpath.."/block/turtle.lua")
 dofile(modpath.."/entity/turtle.lua")
-minetest.register_privilege("computertest", {
+minetest.register_privilege("adabots", {
     description = "DANGEROUS: User can script on turtles. Only give to trusted users.",
 })
