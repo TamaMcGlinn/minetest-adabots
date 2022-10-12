@@ -1,18 +1,22 @@
 
+local http_api = minetest.request_http_api()
+if http_api == nil then
+  print("ERROR: HTTP disabled. In minetest Settings > All Settings > HTTP mods, list adabots")
+end
+local modpath = minetest.get_modpath("adabots")
+
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
-local FORMNAME_TURTLE_NOPRIV    = "adabots:turtle:nopriv:"
 local FORMNAME_TURTLE_TERMINAL  = "adabots:turtle:terminal:"
 local FORMNAME_TURTLE_UPLOAD    = "adabots:turtle:upload:"
-
-local FORM_NOPRIV = "size[9,1;]label[0,0;You do not have the 'adabots' privilege.\nThis is required for interacting with turtles.]";
 
 local TURTLE_INVENTORYSIZE = 4*4
 
 ---@returns TurtleEntity of that ID
 local function getTurtle(id) return adabots.turtles[id] end
----@returns true
+
+---@returns true if given index is in range [1, TURTLE_INVENTORYSIZE]
 local function isValidInventoryIndex(index) return 0 < index and index <= TURTLE_INVENTORYSIZE end
-local function has_adabots_priv(player) return minetest.check_player_privs(player,"adabots") end
+
 ---@param item string
 ---@param filterList table of strings
 ---@param isWhitelist boolean true=whitelist filtering, false=blacklist filtering
@@ -304,11 +308,6 @@ end
 ---@returns true on success
 ---
 function TurtleEntity:upload_code_to_turtle(player, code_string,run_for_result)
-    --Check permissions
-    if not has_adabots_priv(player) then
-        --minetest.debug(player:get_player_name().." does not have adabots priv")
-        return false
-    end
     local function sandbox(code)
         --TODO sandbox this!
         --Currently returns function that defines init and loop. In the future, this should probably just initialize it using some callbacks
@@ -328,15 +327,20 @@ end
 function TurtleEntity:get_formspec_inventory()
     local selected_y = math.floor((self.selected_slot - 1) / 4) + 1
     local selected_x = ((self.selected_slot - 1) % 4) + 8
-    return "size[12,5;]"
-            .."button[0,0;2,1;open_terminal;Open Terminal]"
-            .."button[2,0;2,1;upload_code;Upload Code]"
-            .."button[4,0;2,1;factory_reset;Factory Reset]"
-            .."set_focus[open_terminal;true]"
-            .."list[".. self.inv_fullname..";main;8,1;4,4;]"
-            .."background[" .. selected_x .. "," .. selected_y .. ";1,1;adabots_inventory.png]"
-            .."background[7.975,1;0.05,4;adabots_inventory.png]" -- reusing the same white texture for a vertical divider
-            .."list[current_player;main;0,1;8,4;]";
+    -- return "size[12,5;]"
+    --         .."button[0,0;2,1;open_terminal;Open Terminal]"
+    --         .."button[2,0;2,1;upload_code;Upload Code]"
+    --         .."button[4,0;2,1;factory_reset;Factory Reset]"
+    --         .."set_focus[open_terminal;true]"
+    --         .."list[".. self.inv_fullname..";main;8,1;4,4;]"
+    --         .."background[" .. selected_x .. "," .. selected_y .. ";1,1;adabots_inventory.png]"
+    --         .."background[7.975,1;0.05,4;adabots_inventory.png]" -- reusing the same white texture for a vertical divider
+    --         .."list[current_player;main;0,1;8,4;]";
+    return "size[8,7.5]"
+           .."image[1,0.6;1,2;" .. modpath .. "/turtle_icon.png]"
+           .."list[current_player;main;0,3.5;8,4;]"
+           .."list[current_player;craft;3,0;3,3;]"
+           .."list[current_player;craftpreview;7,1;1,1;]"
 end
 function TurtleEntity:get_formspec_terminal()
     local previous_answers = self.previous_answers
@@ -360,6 +364,7 @@ function TurtleEntity:get_formspec_upload()
         .."textarea[0,1;12,8;upload;;"..minetest.formspec_escape(self.codeUncompiled or "").."]"
         .."set_focus[upload;true]";
 end
+
 --MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
 function TurtleEntity:on_activate(staticdata, dtime_s)
     local data = minetest.deserialize(staticdata)
@@ -394,16 +399,12 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     -- Add to turtle list
     adabots.turtles[self.id] = self
 end
+
 function TurtleEntity:on_rightclick(clicker)
     if not clicker or not clicker:is_player() then
         return
     end
-    if not has_adabots_priv(clicker) then
-        minetest.show_formspec(clicker:get_player_name(),FORMNAME_TURTLE_NOPRIV,FORM_NOPRIV);
-        return
-    end
-    minetest.show_formspec(clicker:get_player_name(), FORMNAME_TURTLE_INVENTORY.. self.id,
-            self:get_formspec_inventory())
+    minetest.show_formspec(clicker:get_player_name(), FORMNAME_TURTLE_INVENTORY .. self.id, self:get_formspec_inventory())
 end
 function TurtleEntity:get_staticdata()
     minetest.debug("Serializing turtle "..self.name)
@@ -706,9 +707,5 @@ function TurtleEntity:debug(string)
     end
 end
 function TurtleEntity:dump(object) return dump(object) end
-
---    MAIN TURTLE INTERFACE END---------------------------------------
---    MAIN TURTLE INTERFACE END---------------------------------------
---    MAIN TURTLE INTERFACE END---------------------------------------
 
 minetest.register_entity("adabots:turtle", TurtleEntity)
