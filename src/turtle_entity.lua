@@ -1,13 +1,5 @@
 
-local http_api = minetest.request_http_api()
-if http_api == nil then
-  print("ERROR: HTTP disabled. In minetest Settings > All Settings > HTTP mods, list adabots")
-end
-local modpath = minetest.get_modpath("adabots")
-
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
-local FORMNAME_TURTLE_TERMINAL  = "adabots:turtle:terminal:"
-local FORMNAME_TURTLE_UPLOAD    = "adabots:turtle:upload:"
 
 local TURTLE_INVENTORYSIZE = 4*4
 
@@ -17,19 +9,6 @@ local function getTurtle(id) return adabots.turtles[id] end
 ---@returns true if given index is in range [1, TURTLE_INVENTORYSIZE]
 local function isValidInventoryIndex(index) return 0 < index and index <= TURTLE_INVENTORYSIZE end
 
----@param item string
----@param filterList table of strings
----@param isWhitelist boolean true=whitelist filtering, false=blacklist filtering
----@return boolean true if item in filter
-local function infilter(item, filterList, isWhitelist)
-    for _, filterItemname in pairs(filterList) do
-        local isInGroup = minetest.get_item_group(item, filterItemname)
-        if item== filterItemname or (isInGroup ~= 0 and isInGroup ~= nil) then
-            return isWhitelist
-        end
-    end
-    return not isWhitelist
-end
 -- advtrains inventory serialization helper (c) 2017 orwell96
 local function serializeInventory(inv)
     local data = {}
@@ -42,6 +21,7 @@ local function serializeInventory(inv)
     end
     return minetest.serialize(data)
 end
+
 local function deserializeInventory(inv, str)
     local data = minetest.deserialize(str)
     if data then
@@ -55,48 +35,17 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
     local function isForm(name)
         return string.sub(formname,1,string.len(name))==name
     end
-    --minetest.debug("FORM SUBMITTED",dump(player),dump(formname),dump(fields))
     if isForm(FORMNAME_TURTLE_INVENTORY) then
         local id = tonumber(string.sub(formname,1+string.len(FORMNAME_TURTLE_INVENTORY)))
         local turtle = getTurtle(id)
-        if fields.upload_code=="Upload Code" then
-            minetest.show_formspec(player:get_player_name(),FORMNAME_TURTLE_UPLOAD..id,turtle:get_formspec_upload());
-        elseif fields.open_terminal=="Open Terminal" then
-            minetest.show_formspec(player:get_player_name(),FORMNAME_TURTLE_TERMINAL..id,turtle:get_formspec_terminal());
-        elseif fields.factory_reset=="Factory Reset" then
-            return not turtle:upload_code_to_turtle(player,"",false)
+        if fields.listen=="Listen" then
+            local listen_command = "function init(turtle) return turtle:listen() end"
+            return not turtle:upload_code_to_turtle(player,listen_command,false)
         end
-    elseif isForm(FORMNAME_TURTLE_TERMINAL) then
-        if fields.terminal_out ~= nil then
-            return true
-        end
-        local id = tonumber(string.sub(formname,1+string.len(FORMNAME_TURTLE_TERMINAL)))
-        local turtle = getTurtle(id)
-        turtle.lastCommandRan = fields.terminal_in
-        local command = fields.terminal_in
-        if command==nil or command=="" then
-            return nil
-        end
-        command = "function init(turtle) return "..command.." end"
-        local commandResult = turtle:upload_code_to_turtle(player,command, true)
-        if commandResult == nil then
-            minetest.close_formspec(player:get_player_name(),FORMNAME_TURTLE_TERMINAL..id)
-            return true
-        end
-        commandResult = fields.terminal_in.." -> "..commandResult
-        turtle.previous_answers[#turtle.previous_answers+1] = commandResult
-        minetest.show_formspec(player:get_player_name(),FORMNAME_TURTLE_TERMINAL..id,turtle:get_formspec_terminal());
-    elseif isForm(FORMNAME_TURTLE_UPLOAD) then
-        local id = tonumber(string.sub(formname,1+string.len(FORMNAME_TURTLE_UPLOAD)))
-        if fields.button_upload == nil or fields.upload == nil then
-            return true
-        end
-        local turtle = getTurtle(id)
-        return not turtle:upload_code_to_turtle(player,fields.upload,false)
+        return true
     else
         return false--Unknown formname, input not processed
     end
-    return true--Known formname, input processed "If function returns `true`, remaining functions are not called"
 end)
 
 --Code responsible for updating turtles every turtle_tick
@@ -245,11 +194,9 @@ function TurtleEntity:itemSuck(nodeLocation, filterList, isWhitelist, listname)
 
     local function suckList(listname, listStacks)
         for stackI,itemStack in pairs(listStacks) do
-            if infilter(itemStack:get_name(),filterList, isWhitelist) then
-                local remainingItemStack = self.inv:add_item("main",itemStack)
-                nodeInventory:set_stack(listname, stackI, remainingItemStack)
-                suckedEverything = suckedEverything and remainingItemStack:is_empty()
-            end
+            local remainingItemStack = self.inv:add_item("main",itemStack)
+            nodeInventory:set_stack(listname, stackI, remainingItemStack)
+            suckedEverything = suckedEverything and remainingItemStack:is_empty()
         end
     end
 
@@ -295,12 +242,9 @@ function TurtleEntity:itemPush(nodeLocation, filterList, isWhitelist, listname)
     for turtleslot = 1, TURTLE_INVENTORYSIZE do
         local toPush = self:getTurtleslot(turtleslot)
         minetest.debug("Topush: "..toPush:to_string())
-        if infilter(toPush:get_name(), filterList, isWhitelist) then
-            minetest.debug("Pushing into inventory, in filter")
-            local remainingItemStack = nodeInventory:add_item(listname,toPush)
-            self:setTurtleslot(turtleslot, remainingItemStack)
-            ret = ret and remainingItemStack:is_empty()
-        end
+        local remainingItemStack = nodeInventory:add_item(listname,toPush)
+        self:setTurtleslot(turtleslot, remainingItemStack)
+        ret = ret and remainingItemStack:is_empty()
     end
     return ret
 end
@@ -323,46 +267,21 @@ function TurtleEntity:upload_code_to_turtle(player, code_string,run_for_result)
     end
     return self.code ~= nil
 end
+
 --MAIN TURTLE USER INTERFACE------------------------------------------
 function TurtleEntity:get_formspec_inventory()
-    local selected_y = math.floor((self.selected_slot - 1) / 4) + 1
+    local selected_y = math.floor((self.selected_slot - 1) / 4) + 4
     local selected_x = ((self.selected_slot - 1) % 4) + 8
-    -- return "size[12,5;]"
-    --         .."button[0,0;2,1;open_terminal;Open Terminal]"
-    --         .."button[2,0;2,1;upload_code;Upload Code]"
-    --         .."button[4,0;2,1;factory_reset;Factory Reset]"
-    --         .."set_focus[open_terminal;true]"
-    --         .."list[".. self.inv_fullname..";main;8,1;4,4;]"
-    --         .."background[" .. selected_x .. "," .. selected_y .. ";1,1;adabots_inventory.png]"
-    --         .."background[7.975,1;0.05,4;adabots_inventory.png]" -- reusing the same white texture for a vertical divider
-    --         .."list[current_player;main;0,1;8,4;]";
-    return "size[8,7.5]"
-           .."image[1,0.6;1,2;" .. modpath .. "/turtle_icon.png]"
-           .."list[current_player;main;0,3.5;8,4;]"
-           .."list[current_player;craft;3,0;3,3;]"
-           .."list[current_player;craftpreview;7,1;1,1;]"
-end
-function TurtleEntity:get_formspec_terminal()
-    local previous_answers = self.previous_answers
-    local parsed_output = "";
-    for i=1, #previous_answers do
-        parsed_output = parsed_output .. minetest.formspec_escape(previous_answers[i])..","
-    end
-    return
-        "size[12,9;]"
-        .."field_close_on_enter[terminal_in;false]"
-        .."field[0,0;12,1;terminal_in;;"..minetest.formspec_escape(self.lastCommandRan or "").."]"
-        .."set_focus[terminal_in;true]"
-        .."textlist[0,1;12,8;terminal_out;"..parsed_output.."]";
-end
-function TurtleEntity:get_formspec_upload()
-    --TODO could indicate if code is already uploaded
-    return
-        "size[12,9;]"
-        .."button[0,0;3,1;button_upload;Upload Code to '"..self.name.."']"
-        .."field_close_on_enter[upload;false]"
-        .."textarea[0,1;12,8;upload;;"..minetest.formspec_escape(self.codeUncompiled or "").."]"
-        .."set_focus[upload;true]";
+    return "size[12,8;]"
+            .."image[8,0;2,2;turtle_icon.png]"
+            .."textarea[0.2,0;3,0.8;host_ip;;"..minetest.formspec_escape(self.host_ip or "localhost").."]"
+            .."textarea[3.4,0;1,0.8;host_port;;"..minetest.formspec_escape(self.host_port or "7112").."]"
+            .."button[6,0;2,1;listen;Listen]"
+            .."set_focus[listen;true]"
+            .."list[".. self.inv_fullname..";main;8,4;4,4;]"
+            .."background[" .. selected_x .. "," .. selected_y .. ";1,1;adabots_inventory.png]"
+            .."background[7.975,4;0.05,4;adabots_inventory.png]" -- reusing the same white texture for a vertical divider
+            .."list[current_player;main;0,4;8,4;]";
 end
 
 --MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
