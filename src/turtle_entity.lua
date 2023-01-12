@@ -1,4 +1,7 @@
 
+local S = minetest.get_translator(minetest.get_current_modname())
+local F = minetest.formspec_escape
+
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 
 local TURTLE_INVENTORYSIZE = 4*4
@@ -39,7 +42,7 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
         local id = tonumber(string.sub(formname,1+string.len(FORMNAME_TURTLE_INVENTORY)))
         local turtle = getTurtle(id)
         if fields.listen=="Listen" then
-            local listen_command = "function init(turtle) return turtle:listen() end"
+            local listen_command = "function init(turtle) return turtle:listen('192.168.2.156', 7112, 0.3) end"
             return not turtle:upload_code_to_turtle(player,listen_command,false)
         end
         return true
@@ -70,7 +73,7 @@ minetest.register_globalstep(function(dtime)
                 --elseif coroutine.status(turtle.coroutine)=="dead" then
                 --minetest.log("turtle #"..id.." has coroutine, but it's already done running")
             elseif turtle.code then
-                --minetest.log("turtle #"..id.." has no coroutine but has code! Making coroutine...")
+                minetest.log("turtle has no coroutine but has code! Making coroutine for code... " .. turtle.codeUncompiled)
                 --TODO add some kinda timeout into coroutine
                 turtle.coroutine = coroutine.create(function()
                     turtle.code()
@@ -270,18 +273,58 @@ end
 
 --MAIN TURTLE USER INTERFACE------------------------------------------
 function TurtleEntity:get_formspec_inventory()
-    local selected_y = math.floor((self.selected_slot - 1) / 4) + 4
-    local selected_x = ((self.selected_slot - 1) % 4) + 8
-    return "size[12,8;]"
-            .."image[8,0;2,2;turtle_icon.png]"
-            .."textarea[0.2,0;3,0.8;host_ip;;"..minetest.formspec_escape(self.host_ip or "localhost").."]"
-            .."textarea[3.4,0;1,0.8;host_port;;"..minetest.formspec_escape(self.host_port or "7112").."]"
-            .."button[6,0;2,1;listen;Listen]"
-            .."set_focus[listen;true]"
-            .."list[".. self.inv_fullname..";main;8,4;4,4;]"
-            .."background[" .. selected_x .. "," .. selected_y .. ";1,1;adabots_inventory.png]"
-            .."background[7.975,4;0.05,4;adabots_inventory.png]" -- reusing the same white texture for a vertical divider
-            .."list[current_player;main;0,4;8,4;]";
+    local turtle_inv_x = 5
+    local turtle_inv_y = 0.4
+    local selected_x = ((self.selected_slot - 1) % 4) + turtle_inv_x
+    local selected_y = math.floor((self.selected_slot - 1) / 4) + turtle_inv_y
+    local listening = false
+    local sleeping_image = "" -- TODO check listening and set Zzz image
+	  local form = "size[9,9.75]"..
+	  "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]"..
+
+	  -- turtle image
+    "image[0,0;2,2;turtle_icon2.png]"..
+    sleeping_image ..
+
+    -- turtle name
+    "style_type[field;font_size=26]"..
+	  "field[2.0,0.8;3,1;name;" .. F(minetest.colorize("#313131", "AdaBot name")) .. ";"..F(self.name).."]"..
+
+    -- turtle buttons
+	  "image_button[4,2.4;1,1;play_btn.png;listen;]"..
+	  "tooltip[listen;Start/stop listening]"..
+
+	  -- connection settings
+    "style_type[field;font_size=20]"..
+	  "label[0.4,2.0;"..F(minetest.colorize("#313131", "Connection settings")).."]"..
+    "field[0.6,2.9;2.7,0.5;host_ip;;"..F(minetest.colorize("#313131", self.host_ip or "localhost")).."]"..
+    "field[3.2,2.9;1,0.5;host_port;;"..F(minetest.colorize("#313131", self.host_port or "7112")).."]"..
+
+	  -- turtle inventory
+	  "label[" .. turtle_inv_x .. "," .. turtle_inv_y - 0.55 .. ";"..F(minetest.colorize("#313131", "AdaBot " .. S("Inventory"))).."]"..
+	  mcl_formspec.get_itemslot_bg(turtle_inv_x,turtle_inv_y,4,4)..
+
+    -- turtle selection
+    "background[" .. selected_x .. "," .. selected_y - 0.05 .. ";1,1.1;mcl_inventory_hotbar_selected.png]"..
+
+    -- turtle inventory items
+    "list[".. self.inv_fullname..";main;" .. turtle_inv_x .. "," .. turtle_inv_y .. ";4,4;]"..
+
+	  -- help button
+	  -- "image_button[4,3.4;1,1;doc_button_icon_lores.png;__mcl_doc;]"..
+	  -- "tooltip[__mcl_doc;"..F(S("Help")).."]"..
+
+	  -- player inventory
+	  "label[0,4.5;"..F(minetest.colorize("#313131", "Player " .. S("Inventory"))).."]"..
+	  mcl_formspec.get_itemslot_bg(0,5.0,9,3)..
+	  mcl_formspec.get_itemslot_bg(0,8.24,9,1)..
+
+	  -- player inventory items
+	  "list[current_player;main;0,5.0;9,3;9]" .. 
+	  "list[current_player;main;0,8.24;9,1;0]" ..
+
+    "set_focus[listen;true]"
+	  return form
 end
 
 --MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
@@ -291,7 +334,7 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     --Give ID
     adabots.num_turtles = adabots.num_turtles+1
     self.id = adabots.num_turtles
-    self.name = data.name or "Unnamed #"..self.id
+    self.name = data.name or "Bob"
     --self.owner = minetest.get_meta(pos):get_string("owner")
     self.heading = data.heading or 0
     self.previous_answers = data.previous_answers or {}
@@ -484,9 +527,10 @@ local function update_adabots(self)
 end
 
 function TurtleEntity:listen(host, ip, period)
-  host = host or "localhost"
-  ip = ip or "7112"
-  self.adabots_server = "http://" .. host .. ":" .. ip
+  self.host = host or "localhost"
+  self.ip = ip or "7112"
+  self.adabots_server = "http://" .. self.host .. ":" .. self.ip
+  minetest.log("listening on " .. self.adabots_server)
   self.adabots_period = period or 0.3
   update_adabots(self)
 end
