@@ -34,6 +34,18 @@ local function deserializeInventory(inv, str)
     return false
 end
 
+local function updateBotField(turtle, fields, field_key, is_connection_field)
+  field_value = fields[field_key]
+  if field_value then
+    if turtle[field_key] ~= field_value then
+      if is_connection_field then
+        turtle:stopListen()
+      end
+      turtle[field_key] = field_value
+    end
+  end
+end
+
 minetest.register_on_player_receive_fields(function(player, formname, fields)
     local function isForm(name)
         return string.sub(formname,1,string.len(name))==name
@@ -41,9 +53,14 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
     if isForm(FORMNAME_TURTLE_INVENTORY) then
         local id = tonumber(string.sub(formname,1+string.len(FORMNAME_TURTLE_INVENTORY)))
         local turtle = getTurtle(id)
-        if fields.listen=="Listen" then
-            local listen_command = "function init(turtle) return turtle:listen('192.168.2.156', 7112, 0.3) end"
-            return not turtle:upload_code_to_turtle(player,listen_command,false)
+        updateBotField(turtle, fields, "name", false)
+        updateBotField(turtle, fields, "host_ip", true)
+        updateBotField(turtle, fields, "host_port", true)
+        if fields.listen then
+            turtle:stopListen()
+            local listen_command = "function init(turtle) return turtle:listen('" .. turtle.host_ip .. "', " .. turtle.host_port .. ", 0.3) end"
+            turtle:upload_code_to_turtle(player,listen_command,false)
+            return true
         end
         return true
     else
@@ -279,8 +296,12 @@ function TurtleEntity:get_formspec_inventory()
     local selected_y = math.floor((self.selected_slot - 1) / 4) + turtle_inv_y
     local listening = false
     local sleeping_image = "" -- TODO check listening and set Zzz image
-	  local form = "size[9,9.75]"..
+	  local form = 
+	  -- general settings
+	  "size[9,9.75]"..
+    "options[key_event=true]"..
 	  "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]"..
+    "set_focus[listen;true]"..
 
 	  -- turtle image
     "image[0,0;2,2;turtle_icon2.png]"..
@@ -323,7 +344,7 @@ function TurtleEntity:get_formspec_inventory()
 	  "list[current_player;main;0,5.0;9,3;9]" .. 
 	  "list[current_player;main;0,8.24;9,1;0]" ..
 
-    "set_focus[listen;true]"
+    ""
 	  return form
 end
 
@@ -335,6 +356,8 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     adabots.num_turtles = adabots.num_turtles+1
     self.id = adabots.num_turtles
     self.name = data.name or "Bob"
+    self.host_ip = data.host_ip or "localhost"
+    self.host_port = data.host_port or 7112
     --self.owner = minetest.get_meta(pos):get_string("owner")
     self.heading = data.heading or 0
     self.previous_answers = data.previous_answers or {}
@@ -373,6 +396,8 @@ function TurtleEntity:get_staticdata()
     return minetest.serialize({
         id = self.id,
         name = self.name,
+        host_ip = self.host_ip,
+        host_port = self.host_port,
         heading = self.heading,
         previous_answers = self.previous_answers,
         coroutine = nil,--self.coroutine,
@@ -489,6 +514,7 @@ function TurtleEntity:itemPushTurtleslotLeft    (turtleslot, listname)      retu
 
 function TurtleEntity:stopListen()
   self.adabots_server = ""
+  minetest.debug("Stopped listening")
 end
 
 local function update_adabots(self)
@@ -530,7 +556,7 @@ function TurtleEntity:listen(host, ip, period)
   self.host = host or "localhost"
   self.ip = ip or "7112"
   self.adabots_server = "http://" .. self.host .. ":" .. self.ip
-  minetest.log("listening on " .. self.adabots_server)
+  minetest.debug("listening on " .. self.adabots_server)
   self.adabots_period = period or 0.3
   update_adabots(self)
 end
@@ -666,7 +692,7 @@ end
 
 function TurtleEntity:debug(string)
     if adabots.config.debug then
-        minetest.debug("adabots turtle #"..self.id..": "..string)
+        minetest.debug("adabots turtle #"..self.id..": "..(string or "nil string"))
     end
 end
 function TurtleEntity:dump(object) return dump(object) end
