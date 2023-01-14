@@ -1,3 +1,5 @@
+local adabots_period = 0.3
+
 local S = minetest.get_translator(minetest.get_current_modname())
 local F = minetest.formspec_escape
 
@@ -61,9 +63,7 @@ minetest.register_on_player_receive_fields(
             if fields.listen then
                 turtle:stopListen()
                 local listen_command =
-                    "function init(turtle) return turtle:listen('" ..
-                        turtle.host_ip .. "', " .. turtle.host_port ..
-                        ", 0.3) end"
+                    "function init(turtle) return turtle:listen() end"
                 turtle:upload_code_to_turtle(player, listen_command, false)
                 return true
             end
@@ -621,18 +621,16 @@ local function update_adabots(self)
         end
 
         if self.adabots_server ~= "" then
-            minetest.after(self.adabots_period,
-                           function() update_adabots(self) end)
+            minetest.after(adabots_period, function()
+                update_adabots(self)
+            end)
         end
     end)
 end
 
-function TurtleEntity:listen(host, ip, period)
-    self.host = host or "localhost"
-    self.ip = ip or "7112"
-    self.adabots_server = "http://" .. self.host .. ":" .. self.ip
+function TurtleEntity:listen()
+    self.adabots_server = "http://" .. self.host_ip .. ":" .. self.host_port
     minetest.debug("listening on " .. self.adabots_server)
-    self.adabots_period = period or 0.3
     update_adabots(self)
 end
 
