@@ -61,12 +61,13 @@ minetest.register_on_player_receive_fields(
             updateBotField(turtle, fields, "host_ip", true)
             updateBotField(turtle, fields, "host_port", true)
             if fields.listen then
-                turtle:stopListen()
-                local listen_command =
-                    "function init(turtle) return turtle:listen() end"
-                turtle:upload_code_to_turtle(player, listen_command, false)
+                turtle.doAction(turtle, player, "listen")
                 return true
             end
+            if fields.forward then turtle.forward(turtle, true) end
+            if fields.backward then turtle.back(turtle, true) end
+            if fields.turnleft then turtle.turnLeft(turtle, true) end
+            if fields.turnright then turtle.turnRight(turtle, true) end
             return true
         else
             return false -- Unknown formname, input not processed
@@ -146,23 +147,21 @@ function TurtleEntity:setTurtleslot(turtleslot, stack)
     self.inv:set_stack("main", turtleslot, stack)
     return true
 end
-function TurtleEntity:move(nodeLocation)
+function TurtleEntity:move(nodeLocation, no_yield)
     -- Verify new pos is empty
     if nodeLocation == nil or minetest.get_node(nodeLocation).name ~= "air" then
-        self:yield("Moving")
+        self:after_action("Moving", false, false)
         return false
     end
     -- Take Action
     self.object:move_to(nodeLocation, true)
-    self:yield("Moving", true)
+    self:after_action("Moving", true, not no_yield)
     return true
 end
 function TurtleEntity:mine(nodeLocation)
     if nodeLocation == nil then return false end
     local node = minetest.get_node(nodeLocation)
     if node.name == "air" then return false end
-    -- Try sucking the inventory (in case it's a chest)
-    self:itemSuck(nodeLocation)
     local drops = minetest.get_node_drops(node)
     -- TODO NOTE This violates spawn protection, but I know of no way to mine that abides by spawn protection AND picks up all items and contents (dig_node drops items and I don't know how to pick them up)
     minetest.remove_node(nodeLocation)
@@ -170,11 +169,22 @@ function TurtleEntity:mine(nodeLocation)
         local stack = ItemStack(iteminfo)
         if self.inv:room_for_item("main", stack) then
             self.inv:add_item("main", stack)
+        else
+            minetest.add_item(nodeLocation, stack.name)
         end
     end
-    self:yield("Mining", true)
+    self:after_action("Mining", true, true)
     return true
 end
+
+-- needed interface to mcl_inventory to be able to drop things
+
+function TurtleEntity:get_inventory() return nil end
+
+function TurtleEntity:is_player() return false end
+
+-- end interface to mcl_inventory to be able to drop things
+
 function TurtleEntity:build(nodeLocation)
     if nodeLocation == nil then return false end
 
@@ -195,58 +205,36 @@ function TurtleEntity:build(nodeLocation)
     self.inv:set_stack("main", self.selected_slot, stack)
 
     if position_placed == nil then
-        self:yield("Building")
+        self:after_action("Building", true, true)
         return false
     end
 
-    self:yield("Building", true)
+    self:after_action("Building", true, true)
     return true
 end
-function TurtleEntity:scan(nodeLocation)
-    return minetest.get_node_or_nil(nodeLocation)
+function TurtleEntity:inspectnode(nodeLocation)
+    local result = minetest.get_node(nodeLocation)
+    return "minecraft:" .. result.name
 end
-function TurtleEntity:itemDropTurtleslot(nodeLocation, turtleslot)
-    local drop_pos = minetest.find_node_near(nodeLocation, 1, {"air"}) or
-                         nodeLocation
-    local leftover = minetest.item_drop(self:getTurtleslot(turtleslot), nil,
-                                        drop_pos)
-    self:setTurtleslot(turtleslot, leftover)
+function TurtleEntity:detectnode(nodeLocation)
+    return self:inspectnode(nodeLocation) ~= "minecraft:air"
 end
+function TurtleEntity:itemDrop(nodeLocation, amount)
+    local stack = self:getTurtleslot(self.selected_slot)
+    if stack:is_empty() then return false end
 
----Takes everything from block that matches list
---- @param filterList - Something like {"default:stone","default:dirt"}
---- @param isWhitelist - If true, only take things in list.
----         If false, take everything EXCEPT the items in the list
---- @param listname - take only from specific listname. If nil, take from every list
---- @return boolean true unless any items can't fit
-function TurtleEntity:itemSuck(nodeLocation, filterList, isWhitelist, listname)
-    filterList = filterList or {}
-    local suckedEverything = true
-    local nodeInventory = minetest.get_inventory({
-        type = "node",
-        pos = nodeLocation
-    })
-    if not nodeInventory then
-        return true -- No node inventory, nothing left to suck
-    end
+    -- add item to world
+    item_name = stack:to_table().name
+    minetest.debug("dropping " .. amount .. " " .. item_name)
+    for item_count = 1, amount do minetest.add_item(nodeLocation, item_name) end
 
-    local function suckList(listname, listStacks)
-        for stackI, itemStack in pairs(listStacks) do
-            local remainingItemStack = self.inv:add_item("main", itemStack)
-            nodeInventory:set_stack(listname, stackI, remainingItemStack)
-            suckedEverything = suckedEverything and
-                                   remainingItemStack:is_empty()
-        end
-    end
-
-    if listname then
-        suckList(listname, nodeInventory:get_list(listname))
-    else
-        for listname, listStacks in pairs(nodeInventory:get_lists()) do
-            suckList(listname, listStacks)
-        end
-    end
-    return suckedEverything
+    -- adjust inventory stack
+    stack:set_count(stack:get_count() - amount)
+    self.inv:set_stack("main", self.selected_slot, stack)
+    -- local drop_pos = minetest.find_node_near(nodeLocation, 1, {"air"}) or
+    --                      nodeLocation
+    -- TODO test if dropping into chests works
+    return true
 end
 
 --- Pushes a single turtleslot, unfiltered
@@ -266,33 +254,7 @@ function TurtleEntity:itemPushTurtleslot(nodeLocation, turtleslot, listname)
     self:setTurtleslot(turtleslot, remainingItemStack)
     return remainingItemStack:is_empty()
 end
----Pushes everything in turtle that matches filter
---- @param filterList - Something like {"default:stone","default:dirt"}
---- @param isWhitelist - If true, only take things in list.
----         If false, take everything EXCEPT the items in the list
---- @param listname - Push to this listname. If nil, push to main
---- @return boolean true if able to push everything that matches the filter
-function TurtleEntity:itemPush(nodeLocation, filterList, isWhitelist, listname)
-    local ret = true
-    listname = listname or "main"
-    filterList = filterList or {}
-    local nodeInventory = minetest.get_inventory({
-        type = "node",
-        pos = nodeLocation
-    }) -- InvRef
-    if not nodeInventory then
-        return false -- No node inventory (Ex: Not a chest)
-    end
-    minetest.debug("Pushing into inventory")
-    for turtleslot = 1, TURTLE_INVENTORYSIZE do
-        local toPush = self:getTurtleslot(turtleslot)
-        minetest.debug("Topush: " .. toPush:to_string())
-        local remainingItemStack = nodeInventory:add_item(listname, toPush)
-        self:setTurtleslot(turtleslot, remainingItemStack)
-        ret = ret and remainingItemStack:is_empty()
-    end
-    return ret
-end
+
 ---
 ---@returns true on success
 ---
@@ -321,49 +283,81 @@ function TurtleEntity:get_formspec_inventory()
     local selected_y = math.floor((self.selected_slot - 1) / 4) + turtle_inv_y
     local listening = false
     local sleeping_image = "" -- TODO check listening and set Zzz image
-    local form = -- general settings
-    "size[9,9.75]" .. "options[key_event=true]" ..
-        "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]" ..
-        "set_focus[listen;true]" .. -- turtle image
-    "image[0,0;2,2;turtle_icon2.png]" .. sleeping_image ..
+    local general_settings = "size[9,9.75]" .. "options[key_event=true]" ..
+                                 "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]"
+    local turtle_image = "set_focus[listen;true]" ..
+                             "image[0,0;2,2;turtle_icon2.png]" .. sleeping_image
 
-        -- turtle name
-        "style_type[field;font_size=26]" .. "field[2.0,0.8;3,1;name;" ..
-        F(minetest.colorize("#313131", "AdaBot name")) .. ";" .. F(self.name) ..
-        "]" .. -- turtle buttons
-    "image_button[4,2.4;1,1;play_btn.png;listen;]" ..
-        "tooltip[listen;Start/stop listening]" ..
+    local turtle_name = "style_type[field;font_size=26]" ..
+                            "field[2.0,0.8;3,1;name;" ..
+                            F(minetest.colorize("#313131", "AdaBot name")) ..
+                            ";" .. F(self.name) .. "]"
 
-        -- connection settings
-        "style_type[field;font_size=20]" .. "label[0.4,2.0;" ..
-        F(minetest.colorize("#313131", "Connection settings")) .. "]" ..
-        "field[0.6,2.9;2.7,0.5;host_ip;;" ..
-        F(minetest.colorize("#313131", self.host_ip or "localhost")) .. "]" ..
-        "field[3.2,2.9;1,0.5;host_port;;" ..
-        F(minetest.colorize("#313131", self.host_port or "7112")) .. "]" ..
+    local play_button =
+        "image_button[4,2.4;1,1;play_btn.png;listen;]tooltip[listen;Start/stop listening]"
 
-        -- turtle inventory
-        "label[" .. turtle_inv_x .. "," .. turtle_inv_y - 0.55 .. ";" ..
-        F(minetest.colorize("#313131", "AdaBot " .. S("Inventory"))) .. "]" ..
-        mcl_formspec.get_itemslot_bg(turtle_inv_x, turtle_inv_y, 4, 4) ..
+    local movement_buttons =
+        "image_button[0,3.4;1,1;arrow_forward.png;forward;]" ..
+            "tooltip[forward;Move forward]" ..
+            "image_button[1,3.4;1,1;arrow_backward.png;backward;]" ..
+            "tooltip[backward;Move backward]" ..
+            "image_button[2,3.4;1,1;arrow_turnleft.png;turnleft;]" ..
+            "tooltip[turnleft;Turn left]" ..
+            "image_button[3,3.4;1,1;arrow_turnright.png;turnright;]" ..
+            "tooltip[turnright;Turn right]"
 
-        -- turtle selection
-        "background[" .. selected_x .. "," .. selected_y - 0.05 ..
-        ";1,1.1;mcl_inventory_hotbar_selected.png]" .. -- turtle inventory items
-    "list[" .. self.inv_fullname .. ";main;" .. turtle_inv_x .. "," ..
-        turtle_inv_y .. ";4,4;]" .. -- help button
-    -- "image_button[4,3.4;1,1;doc_button_icon_lores.png;__mcl_doc;]"..
-    -- "tooltip[__mcl_doc;"..F(S("Help")).."]"..
-    -- player inventory
-    "label[0,4.5;" ..
-        F(minetest.colorize("#313131", "Player " .. S("Inventory"))) .. "]" ..
-        mcl_formspec.get_itemslot_bg(0, 5.0, 9, 3) ..
-        mcl_formspec.get_itemslot_bg(0, 8.24, 9, 1) ..
+    local connection_settings = "style_type[field;font_size=20]" ..
+                                    "label[0.4,2.0;" ..
+                                    F(
+                                        minetest.colorize("#313131",
+                                                          "Connection settings")) ..
+                                    "]" .. "field[0.6,2.9;2.7,0.5;host_ip;;" ..
+                                    F(
+                                        minetest.colorize("#313131",
+                                                          self.host_ip or
+                                                              "localhost")) ..
+                                    "]" .. "field[3.2,2.9;1,0.5;host_port;;" ..
+                                    F(
+                                        minetest.colorize("#313131",
+                                                          self.host_port or
+                                                              "7112")) .. "]"
 
-        -- player inventory items
-        "list[current_player;main;0,5.0;9,3;9]" ..
-        "list[current_player;main;0,8.24;9,1;0]" .. ""
-    return form
+    local turtle_inventory = "label[" .. turtle_inv_x .. "," .. turtle_inv_y -
+                                 0.55 .. ";" ..
+                                 F(
+                                     minetest.colorize("#313131", "AdaBot " ..
+                                                           S("Inventory"))) ..
+                                 "]" ..
+                                 mcl_formspec.get_itemslot_bg(turtle_inv_x,
+                                                              turtle_inv_y, 4, 4)
+
+    local turtle_selection = "background[" .. selected_x .. "," .. selected_y -
+                                 0.05 ..
+                                 ";1,1.1;mcl_inventory_hotbar_selected.png]"
+
+    local turtle_inventory_items = "list[" .. self.inv_fullname .. ";main;" ..
+                                       turtle_inv_x .. "," .. turtle_inv_y ..
+                                       ";4,4;]"
+
+    -- local help_button =
+    --   "image_button[4,3.4;1,1;doc_button_icon_lores.png;__mcl_doc;]"..
+    --   "tooltip[__mcl_doc;"..F(S("Help")).."]"
+
+    local player_inventory = "label[0,4.5;" ..
+                                 F(
+                                     minetest.colorize("#313131", "Player " ..
+                                                           S("Inventory"))) ..
+                                 "]" ..
+                                 mcl_formspec.get_itemslot_bg(0, 5.0, 9, 3) ..
+                                 mcl_formspec.get_itemslot_bg(0, 8.24, 9, 1)
+
+    local player_inventory_items = "list[current_player;main;0,5.0;9,3;9]" ..
+                                       "list[current_player;main;0,8.24;9,1;0]"
+
+    return general_settings .. turtle_image .. turtle_name .. play_button ..
+               movement_buttons .. connection_settings .. turtle_inventory ..
+               turtle_selection .. turtle_inventory_items .. player_inventory ..
+               player_inventory_items
 end
 
 -- MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
@@ -457,18 +451,24 @@ function TurtleEntity:useFuel()
     if self.fuel > 0 then self.fuel = self.fuel - 1; end
 end
 --- From 0 to 3
-function TurtleEntity:setHeading(heading)
+function TurtleEntity:setHeading(heading, no_yield)
     heading = (tonumber(heading) or 0) % 4
     if self.heading ~= heading then
         self.heading = heading
         self.object:set_yaw(self.heading * 3.14159265358979323 / 2)
-        self:yield("Turning", true)
+        if not no_yield then
+            self:after_action("Turning", false, not no_yield)
+        end
     end
     return true
 end
 function TurtleEntity:getHeading() return self.heading end
-function TurtleEntity:turnLeft() return self:setHeading(self:getHeading() + 1) end
-function TurtleEntity:turnRight() return self:setHeading(self:getHeading() - 1) end
+function TurtleEntity:turnLeft(no_yield)
+    return self:setHeading(self:getHeading() + 1, no_yield)
+end
+function TurtleEntity:turnRight(no_yield)
+    return self:setHeading(self:getHeading() - 1, no_yield)
+end
 
 function TurtleEntity:getLocForward() return self:getLocRelative(1, 0, 0) end
 function TurtleEntity:getLocBackward() return self:getLocRelative(-1, 0, 0) end
@@ -481,10 +481,16 @@ function TurtleEntity:place() return self:build(self:getLocForward()) end
 function TurtleEntity:placeUp() return self:build(self:getLocUp()) end
 function TurtleEntity:placeDown() return self:build(self:getLocDown()) end
 
-function TurtleEntity:forward() return self:move(self:getLocForward()) end
-function TurtleEntity:back() return self:move(self:getLocBackward()) end
-function TurtleEntity:up() return self:move(self:getLocUp()) end
-function TurtleEntity:down() return self:move(self:getLocDown()) end
+function TurtleEntity:forward(no_yield)
+    return self:move(self:getLocForward(), no_yield)
+end
+function TurtleEntity:back(no_yield)
+    return self:move(self:getLocBackward(), no_yield)
+end
+function TurtleEntity:up(no_yield) return self:move(self:getLocUp(), no_yield) end
+function TurtleEntity:down(no_yield)
+    return self:move(self:getLocDown(), no_yield)
+end
 
 function TurtleEntity:select(slot)
     if isValidInventoryIndex(slot) then
@@ -501,91 +507,22 @@ function TurtleEntity:dig() return self:mine(self:getLocForward()) end
 function TurtleEntity:digUp() return self:mine(self:getLocUp()) end
 function TurtleEntity:digDown() return self:mine(self:getLocDown()) end
 
-function TurtleEntity:scanForward() return self:scan(self:getLocForward()) end
-function TurtleEntity:scanBackward() return self:scan(self:getLocBackward()) end
-function TurtleEntity:scanUp() return self:scan(self:getLocUp()) end
-function TurtleEntity:scanDown() return self:scan(self:getLocDown()) end
-function TurtleEntity:scanRight() return self:scan(self:getLocRight()) end
-function TurtleEntity:scanLeft() return self:scan(self:getLocLeft()) end
+function TurtleEntity:detect() return self:detectnode(self:getLocForward()) end
+function TurtleEntity:detectUp() return self:detectnode(self:getLocUp()) end
+function TurtleEntity:detectDown() return self:detectnode(self:getLocDown()) end
 
-function TurtleEntity:itemDropTurtleslotForward(turtleslot)
-    return self:itemDropTurtleslot(self:getLocForward(), turtleslot)
-end
-function TurtleEntity:itemDropTurtleslotBackward(turtleslot)
-    return self:itemDropTurtleslot(self:getLocBackward(), turtleslot)
-end
-function TurtleEntity:itemDropTurtleslotUp(turtleslot)
-    return self:itemDropTurtleslot(self:getLocUp(), turtleslot)
-end
-function TurtleEntity:itemDropTurtleslotDown(turtleslot)
-    return self:itemDropTurtleslot(self:getLocDown(), turtleslot)
-end
-function TurtleEntity:itemDropTurtleslotRight(turtleslot)
-    return self:itemDropTurtleslot(self:getLocRight(), turtleslot)
-end
-function TurtleEntity:itemDropTurtleslotLeft(turtleslot)
-    return self:itemDropTurtleslot(self:getLocLeft(), turtleslot)
-end
+function TurtleEntity:inspect() return self:inspectnode(self:getLocForward()) end
+function TurtleEntity:inspectUp() return self:inspectnode(self:getLocUp()) end
+function TurtleEntity:inspectDown() return self:inspectnode(self:getLocDown()) end
 
-function TurtleEntity:itemPushForward(filterList, isWhitelist, listname)
-    return
-        self:itemPush(self:getLocForward(), filterList, isWhitelist, listname)
+function TurtleEntity:drop(amount)
+    return self:itemDrop(self:getLocForward(), amount)
 end
-function TurtleEntity:itemPushBackward(filterList, isWhitelist, listname)
-    return self:itemPush(self:getLocBackward(), filterList, isWhitelist,
-                         listname)
+function TurtleEntity:dropUp(amount)
+    return self:itemDrop(self:getLocUp(), amount)
 end
-function TurtleEntity:itemPushUp(filterList, isWhitelist, listname)
-    return self:itemPush(self:getLocUp(), filterList, isWhitelist, listname)
-end
-function TurtleEntity:itemPushDown(filterList, isWhitelist, listname)
-    return self:itemPush(self:getLocDown(), filterList, isWhitelist, listname)
-end
-function TurtleEntity:itemPushRight(filterList, isWhitelist, listname)
-    return self:itemPush(self:getLocRight(), filterList, isWhitelist, listname)
-end
-function TurtleEntity:itemPushLeft(filterList, isWhitelist, listname)
-    return self:itemPush(self:getLocLeft(), filterList, isWhitelist, listname)
-end
-
-function TurtleEntity:itemSuckForward(filterList, isWhitelist, listname)
-    return
-        self:itemSuck(self:getLocForward(), filterList, isWhitelist, listname)
-end
-function TurtleEntity:itemSuckBackward(filterList, isWhitelist, listname)
-    return self:itemSuck(self:getLocBackward(), filterList, isWhitelist,
-                         listname)
-end
-function TurtleEntity:itemSuckUp(filterList, isWhitelist, listname)
-    return self:itemSuck(self:getLocUp(), filterList, isWhitelist, listname)
-end
-function TurtleEntity:itemSuckDown(filterList, isWhitelist, listname)
-    return self:itemSuck(self:getLocDown(), filterList, isWhitelist, listname)
-end
-function TurtleEntity:itemSuckRight(filterList, isWhitelist, listname)
-    return self:itemSuck(self:getLocRight(), filterList, isWhitelist, listname)
-end
-function TurtleEntity:itemSuckLeft(filterList, isWhitelist, listname)
-    return self:itemSuck(self:getLocLeft(), filterList, isWhitelist, listname)
-end
-
-function TurtleEntity:itemPushTurtleslotForward(turtleslot, listname)
-    return self:itemPushTurtleslot(self:getLocForward(), turtleslot, listname)
-end
-function TurtleEntity:itemPushTurtleslotBackward(turtleslot, listname)
-    return self:itemPushTurtleslot(self:getLocBackward(), turtleslot, listname)
-end
-function TurtleEntity:itemPushTurtleslotUp(turtleslot, listname)
-    return self:itemPushTurtleslot(self:getLocUp(), turtleslot, listname)
-end
-function TurtleEntity:itemPushTurtleslotDown(turtleslot, listname)
-    return self:itemPushTurtleslot(self:getLocDown(), turtleslot, listname)
-end
-function TurtleEntity:itemPushTurtleslotRight(turtleslot, listname)
-    return self:itemPushTurtleslot(self:getLocRight(), turtleslot, listname)
-end
-function TurtleEntity:itemPushTurtleslotLeft(turtleslot, listname)
-    return self:itemPushTurtleslot(self:getLocLeft(), turtleslot, listname)
+function TurtleEntity:dropDown(amount)
+    return self:itemDrop(self:getLocDown(), amount)
 end
 
 function TurtleEntity:stopListen()
@@ -593,27 +530,60 @@ function TurtleEntity:stopListen()
     minetest.debug("Stopped listening")
 end
 
+function TurtleEntity:doAction(player, action)
+    local command = "function init(turtle) return turtle:" .. action .. "() end"
+    self:upload_code_to_turtle(player, command, false)
+end
+
+local function is_command_approved(turtle_command)
+    local direct_commands = {
+        "forward", "turnLeft", "turnRight", "back", "up", "down"
+    }
+    for _, dc in pairs(direct_commands) do
+        if turtle_command == "turtle%." .. dc .. "%(%)" then return true end
+    end
+    local single_number_commands = {"select", "drop", "dropUp", "dropDown"}
+    for _, snc in pairs(single_number_commands) do
+        if turtle_command:find("^turtle%." .. snc .. "%( *%d+%)$") ~= nil then
+            return true
+        end
+    end
+    local location_commands = {"dig", "place", "detect", "inspect"}
+    local locations = {"", "Up", "Down"}
+    for _, lc in pairs(location_commands) do
+        for _, loc in pairs(locations) do
+            local pattern = "^turtle%." .. lc .. loc .. "%(%)$"
+            if turtle_command:find(pattern) ~= nil then return true end
+        end
+    end
+    return false
+end
+
 local function update_adabots(self)
     if self.adabots_server == "" then return end
     http_api.fetch({url = self.adabots_server, timeout = 1}, function(res)
         if res.succeeded then
-            -- local command = res.data
-            local command = res.data:gsub("^turtle.", "self:")
-            local functor = loadstring("return function(self) return " ..
-                                           command .. " end")
-            local result = nil
-            if functor then
-                local turtle_functor = functor()
-                local val = turtle_functor(self)
-                if val ~= nil then
-                    result = tostring(val)
-                else
-                    result = "nil"
-                end
+            local result = ""
+            if not is_command_approved(res.data) then
+                result = "error: unsupported command " .. res.data
             else
-                result = "error: invalid lua expression " .. command
+                local command = res.data:gsub("^turtle.", "self:")
+                local functor = loadstring(
+                                    "return function(self) return " .. command ..
+                                        " end")
+                if functor then
+                    local turtle_functor = functor()
+                    local val = turtle_functor(self)
+                    if val ~= nil then
+                        result = tostring(val)
+                    else
+                        result = "nil"
+                    end
+                else
+                    result = "error: invalid lua expression " .. command
+                end
             end
-            print(command .. " returned " .. result)
+            minetest.debug(res.data .. " returned " .. result)
 
             http_api.fetch({
                 url = self.adabots_server .. "/return_value/" .. result,
@@ -635,9 +605,11 @@ function TurtleEntity:listen()
     update_adabots(self)
 end
 
-function TurtleEntity:yield(reason, useFuel)
+function TurtleEntity:after_action(action, useFuel, yield)
     -- Yield at least once
-    if coroutine.running() == self.coroutine then coroutine.yield(reason) end
+    if yield and coroutine.running() == self.coroutine then
+        coroutine.yield(reason)
+    end
     -- Use a fuel if requested
     if useFuel then self:useFuel() end
 end
@@ -651,7 +623,7 @@ function TurtleEntity:itemGet(turtleslot) return self:getTurtleslot(turtleslot) 
 function TurtleEntity:itemSwapTurtleslot(turtleslotA, turtleslotB)
     if (not isValidInventoryIndex(turtleslotA)) or
         (not isValidInventoryIndex(turtleslotB)) then
-        self:yield("Inventorying")
+        self:after_action("Inventorying", false, true)
         return false
     end
 
@@ -661,7 +633,7 @@ function TurtleEntity:itemSwapTurtleslot(turtleslotA, turtleslotB)
     self:setTurtleslot(turtleslotA, stackB)
     self:setTurtleslot(turtleslotB, stackA)
 
-    self:yield("Inventorying")
+    self:after_action("Inventorying", false, true)
     return true
 end
 
@@ -669,7 +641,7 @@ function TurtleEntity:itemSplitTurtleslot(turtleslotSrc, turtleslotDst, amount)
     if (not isValidInventoryIndex(turtleslotSrc)) or
         (not isValidInventoryIndex(turtleslotDst)) or
         (not self:isTurtleslotEmpty(turtleslotDst)) then
-        self:yield("Inventorying")
+        self:after_action("Inventorying", false, true)
         return false
     end
 
@@ -683,7 +655,7 @@ function TurtleEntity:itemSplitTurtleslot(turtleslotSrc, turtleslotDst, amount)
     stackToSplit:set_count(amount)
     self:setTurtleslot(turtleslotDst, stackToSplit)
 
-    self:yield("Inventorying")
+    self:after_action("Inventorying", false, true)
     return true
 end
 
@@ -742,7 +714,7 @@ function TurtleEntity:itemRefuel(turtleslot)
         end
     end
     self.fuel = self.fuel + fuel.time * adabots.config.fuel_multiplier
-    self:yield("Fueling")
+    self:after_action("Fueling", false, true)
     return true
 end
 
