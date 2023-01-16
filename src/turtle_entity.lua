@@ -104,7 +104,6 @@ minetest.register_globalstep(function(dtime)
                 minetest.log(
                     "turtle has no coroutine but has code! Making coroutine for code... " ..
                         turtle.codeUncompiled)
-                -- TODO add some kinda timeout into coroutine
                 turtle.coroutine = coroutine.create(function()
                     turtle.code()
                     init(turtle)
@@ -214,18 +213,34 @@ end
 function TurtleEntity:itemDrop(nodeLocation, amount)
     local stack = self:getTurtleslot(self.selected_slot)
     if stack:is_empty() then return false end
-
-    -- add item to world
-    item_name = stack:to_table().name
-    minetest.debug("dropping " .. amount .. " " .. item_name)
-    for item_count = 1, amount do minetest.add_item(nodeLocation, item_name) end
+    if stack:get_count() < amount then amount = stack:get_count() end
 
     -- adjust inventory stack
-    stack:set_count(stack:get_count() - amount)
-    self.inv:set_stack("main", self.selected_slot, stack)
-    -- local drop_pos = minetest.find_node_near(nodeLocation, 1, {"air"}) or
-    --                      nodeLocation
-    -- TODO test if dropping into chests works
+    new_amount = stack:get_count() - amount
+    if new_amount > 0 then
+        stack:set_count(new_amount)
+        self.inv:set_stack("main", self.selected_slot, stack)
+    else
+        self.inv:set_stack("main", self.selected_slot, ItemStack(""))
+    end
+
+    -- dump items
+    item_name = stack:to_table().name
+    -- check for chest
+    local chest = minetest.get_inventory({type = "node", pos = nodeLocation})
+    if chest then
+        local chest_stack = ItemStack(item_name)
+        chest_stack:set_count(amount)
+        local remainingItemStack = chest:add_item("main", chest_stack)
+        amount = remainingItemStack:get_count()
+    end
+    if amount > 0 then
+        -- add items to world
+        minetest.debug("dropping " .. amount .. " " .. item_name)
+        for item_count = 1, amount do
+            minetest.add_item(nodeLocation, item_name)
+        end
+    end
     return true
 end
 
@@ -252,18 +267,13 @@ end
 ---
 function TurtleEntity:upload_code_to_turtle(player, code_string, run_for_result)
     local function sandbox(code)
-        -- TODO sandbox this!
-        -- Currently returns function that defines init and loop. In the future, this should probably just initialize it using some callbacks
         if code == "" then return nil end
         return loadstring(code)
     end
     self.codeUncompiled = code_string
     self.coroutine = nil
     self.code = sandbox(self.codeUncompiled)
-    if run_for_result then
-        -- TODO run subroutine once, if it returns a value, return that here
-        return "Ran"
-    end
+    if run_for_result then return "Ran" end
     return self.code ~= nil
 end
 
