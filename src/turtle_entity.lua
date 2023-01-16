@@ -177,14 +177,6 @@ function TurtleEntity:mine(nodeLocation)
     return true
 end
 
--- needed interface to mcl_inventory to be able to drop things
-
-function TurtleEntity:get_inventory() return nil end
-
-function TurtleEntity:is_player() return false end
-
--- end interface to mcl_inventory to be able to drop things
-
 function TurtleEntity:build(nodeLocation)
     if nodeLocation == nil then return false end
 
