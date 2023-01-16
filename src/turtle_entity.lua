@@ -588,8 +588,6 @@ function TurtleEntity:itemPushTurtleslotLeft(turtleslot, listname)
     return self:itemPushTurtleslot(self:getLocLeft(), turtleslot, listname)
 end
 
--- begin Adabots changes; all changes relating to adabots in here, to make it easier to later split into separate CC and Adabots mods
-
 function TurtleEntity:stopListen()
     self.adabots_server = ""
     minetest.debug("Stopped listening")
@@ -636,8 +634,6 @@ function TurtleEntity:listen()
     minetest.debug("listening on " .. self.adabots_server)
     update_adabots(self)
 end
-
--- end Adabots changes; all changes relating to adabots in here, to make it easier to later split into separate CC and Adabots mods
 
 function TurtleEntity:yield(reason, useFuel)
     -- Yield at least once
