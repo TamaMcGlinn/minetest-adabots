@@ -61,7 +61,16 @@ minetest.register_on_player_receive_fields(
             updateBotField(turtle, fields, "host_ip", true)
             updateBotField(turtle, fields, "host_port", true)
             if fields.listen then
-                turtle.doAction(turtle, player, "listen")
+                if turtle.is_listening then
+                    turtle:stopListen()
+                else
+                    turtle.is_listening = true
+                    turtle:doAction(player, "listen")
+                end
+                -- TODO refresh in many interaction cases
+                minetest.show_formspec(player:get_player_name(),
+                                       FORMNAME_TURTLE_INVENTORY .. turtle.id,
+                                       turtle:get_formspec_inventory())
                 return true
             end
             if fields.forward then turtle.forward(turtle, true) end
@@ -203,13 +212,16 @@ function TurtleEntity:build(nodeLocation)
     self:after_action("Building", true, true)
     return true
 end
+
 function TurtleEntity:inspectnode(nodeLocation)
     local result = minetest.get_node(nodeLocation)
     return "minecraft:" .. result.name
 end
+
 function TurtleEntity:detectnode(nodeLocation)
     return self:inspectnode(nodeLocation) ~= "minecraft:air"
 end
+
 function TurtleEntity:itemDrop(nodeLocation, amount)
     local stack = self:getTurtleslot(self.selected_slot)
     if stack:is_empty() then return false end
@@ -283,8 +295,13 @@ function TurtleEntity:get_formspec_inventory()
     local turtle_inv_y = 0.4
     local selected_x = ((self.selected_slot - 1) % 4) + turtle_inv_x
     local selected_y = math.floor((self.selected_slot - 1) / 4) + turtle_inv_y
-    local listening = false
-    local sleeping_image = "" -- TODO check listening and set Zzz image
+    local listening = self.is_listening
+    local sleeping_image = ""
+    local playpause_image = "pause_btn.png"
+    if not listening then
+        sleeping_image = "image[0.9,0.12;0.6,0.6;zzz.png]"
+        playpause_image = "play_btn.png"
+    end
     local general_settings = "size[9,9.75]" .. "options[key_event=true]" ..
                                  "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]"
     local turtle_image = "set_focus[listen;true]" ..
@@ -295,8 +312,8 @@ function TurtleEntity:get_formspec_inventory()
                             F(minetest.colorize("#313131", "AdaBot name")) ..
                             ";" .. F(self.name) .. "]"
 
-    local play_button =
-        "image_button[4,2.4;1,1;play_btn.png;listen;]tooltip[listen;Start/stop listening]"
+    local playpause_button = "image_button[4,2.4;1,1;" .. playpause_image ..
+                                 ";listen;]tooltip[listen;Start/stop listening]"
 
     local movement_buttons =
         "image_button[0,3.4;1,1;arrow_forward.png;forward;]" ..
@@ -356,10 +373,11 @@ function TurtleEntity:get_formspec_inventory()
     local player_inventory_items = "list[current_player;main;0,5.0;9,3;9]" ..
                                        "list[current_player;main;0,8.24;9,1;0]"
 
-    return general_settings .. turtle_image .. turtle_name .. play_button ..
-               movement_buttons .. connection_settings .. turtle_inventory ..
-               turtle_selection .. turtle_inventory_items .. player_inventory ..
-               player_inventory_items
+    return
+        general_settings .. turtle_image .. turtle_name .. playpause_button ..
+            movement_buttons .. connection_settings .. turtle_inventory ..
+            turtle_selection .. turtle_inventory_items .. player_inventory ..
+            player_inventory_items
 end
 
 -- MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
@@ -372,6 +390,7 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     self.name = data.name or "Bob"
     self.host_ip = data.host_ip or "localhost"
     self.host_port = data.host_port or 7112
+    self.is_listening = data.is_listening or false
     -- self.owner = minetest.get_meta(pos):get_string("owner")
     self.heading = data.heading or 0
     self.previous_answers = data.previous_answers or {}
@@ -388,6 +407,9 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     if self.inv == nil or self.inv == false then
         error("Could not spawn inventory")
     end
+
+    -- Restart listening
+    if self.is_listening then self:listen() end
 
     -- Keep items from save
     if data.inv ~= nil then deserializeInventory(self.inv, data.inv) end
@@ -410,6 +432,7 @@ function TurtleEntity:get_staticdata()
         name = self.name,
         host_ip = self.host_ip,
         host_port = self.host_port,
+        is_listening = self.is_listening,
         heading = self.heading,
         previous_answers = self.previous_answers,
         coroutine = nil, -- self.coroutine,
@@ -528,6 +551,7 @@ function TurtleEntity:dropDown(amount)
 end
 
 function TurtleEntity:stopListen()
+    self.is_listening = false
     self.adabots_server = ""
     minetest.debug("Stopped listening")
 end
@@ -602,6 +626,7 @@ local function update_adabots(self)
 end
 
 function TurtleEntity:listen()
+    self.is_listening = true
     self.adabots_server = "http://" .. self.host_ip .. ":" .. self.host_port
     minetest.debug("listening on " .. self.adabots_server)
     update_adabots(self)
