@@ -133,13 +133,29 @@ local TurtleEntity = {
         makes_footstep_sound = false,
         physical = true,
         collisionbox = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5},
-        visual = "cube",
-        visual_size = {x = 0.9, y = 0.9},
+
+        -- -- failed attempt: gives autorotating flat image
+        -- drawtype = "nodebox",
+        -- node_box = {
+        --     type = "fixed",
+        --     fixed = {
+        --         {-0.5, -0.5, -0.5, 0.5, 0, 0.5}, {-0.5, 0, 0, 0.5, 0.5, 0.5}
+        --     }
+        -- },
+
+        visual = "mesh",
+        mesh = "turtle_base.b3d",
+        textures = {"turtle_base_model_texture.png"},
+
+        -- previously working with visual = "cube"
+        -- visual = "cube",
+        -- visual_size = {x = 0.9, y = 0.9},
+        -- textures = {
+        --     "adabots_top.png", "adabots_bottom.png", "adabots_right.png",
+        --     "adabots_left.png", "adabots_back.png", "adabots_front.png"
+        -- },
+
         static_save = true, -- Make sure it gets saved statically
-        textures = {
-            "adabots_top.png", "adabots_bottom.png", "adabots_right.png",
-            "adabots_left.png", "adabots_back.png", "adabots_front.png"
-        },
         automatic_rotate = 0,
         id = -1
     }
@@ -305,7 +321,7 @@ function TurtleEntity:get_formspec_inventory()
     local general_settings = "size[9,9.75]" .. "options[key_event=true]" ..
                                  "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]"
     local turtle_image = "set_focus[listen;true]" ..
-                             "image[0,0;2,2;turtle_icon2.png]" .. sleeping_image
+                             "image[0,0;2,2;turtle_icon.png]" .. sleeping_image
 
     local turtle_name = "style_type[field;font_size=26]" ..
                             "field[2.0,0.8;3,1;name;" ..
@@ -425,6 +441,14 @@ function TurtleEntity:on_rightclick(clicker)
                            FORMNAME_TURTLE_INVENTORY .. self.id,
                            self:get_formspec_inventory())
 end
+
+function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities,
+                               direction, damage)
+    if time_from_last_punch < 0.5 then
+        minetest.debug("double clicked " .. self.name)
+    end
+end
+
 function TurtleEntity:get_staticdata()
     minetest.debug("Serializing turtle " .. self.name)
     return minetest.serialize({

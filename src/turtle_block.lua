@@ -1,12 +1,13 @@
 --[[
-    The turtle block is only used to spawn the turtle entity, then it deletes itself
+    The turtle block is only used when holding a turtle as a block in your hand spawn the turtle entity, then it deletes itself
 ]] minetest.register_node("adabots:turtle", {
     description = "Turtle",
+
     tiles = {
         "adabots_top.png", "adabots_bottom.png", "adabots_right.png",
         "adabots_left.png", "adabots_back.png", "adabots_front.png"
     },
-    groups = {oddly_breakable_by_hand = 2},
+
     paramtype2 = "facedir",
     after_place_node = function(pos, placer)
         if placer and placer:is_player() then
