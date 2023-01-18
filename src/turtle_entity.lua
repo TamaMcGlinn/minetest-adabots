@@ -77,6 +77,8 @@ minetest.register_on_player_receive_fields(
             if fields.backward then turtle.back(turtle, true) end
             if fields.turnleft then turtle.turnLeft(turtle, true) end
             if fields.turnright then turtle.turnRight(turtle, true) end
+            if fields.upward then turtle.up(turtle, true) end
+            if fields.downward then turtle.down(turtle, true) end
             return true
         else
             return false -- Unknown formname, input not processed
@@ -339,7 +341,11 @@ function TurtleEntity:get_formspec_inventory()
             "image_button[2,3.4;1,1;arrow_turnleft.png;turnleft;]" ..
             "tooltip[turnleft;Turn left]" ..
             "image_button[3,3.4;1,1;arrow_turnright.png;turnright;]" ..
-            "tooltip[turnright;Turn right]"
+            "tooltip[turnright;Turn right]" ..
+            "image_button[4,3.4;1,0.55;arrows_up.png;upward;]" ..
+            "tooltip[upward;Go up]" ..
+            "image_button[4,3.85;1,0.55;arrows_down.png;downward;]" ..
+            "tooltip[downward;Go down]"
 
     local connection_settings = "style_type[field;font_size=20]" ..
                                     "label[0.4,2.0;" ..
