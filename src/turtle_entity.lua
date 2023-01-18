@@ -1,11 +1,37 @@
 local adabots_period = 0.3
 
+local modname = minetest.get_current_modname()
+local modpath = minetest.get_modpath(modname)
 local S = minetest.get_translator(minetest.get_current_modname())
 local F = minetest.formspec_escape
 
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 
 local TURTLE_INVENTORYSIZE = 4 * 4
+
+-- lifted from mcl_signs
+local SIGN_WIDTH = 115
+local LINE_LENGTH = 15
+local CHAR_WIDTH = 5
+
+local chars_file = io.open(modpath .. "/characters.txt", "r")
+-- FIXME: Support more characters (many characters are missing). Currently ASCII and Latin-1 Supplement are supported.
+local charmap = {}
+if not chars_file then
+    minetest.log("error", "[mcl_signs] : character map file not found")
+else
+    while true do
+        local char = chars_file:read("*l")
+        if char == nil then break end
+        local img = chars_file:read("*l")
+        chars_file:read("*l")
+        charmap[char] = img
+    end
+end
+
+local NAMETAG_DELTA_X = 0
+local NAMETAG_DELTA_Y = 0
+local NAMETAG_DELTA_Z = -2
 
 ---@returns TurtleEntity of that ID
 local function getTurtle(id) return adabots.turtles[id] end
@@ -37,12 +63,14 @@ local function deserializeInventory(inv, str)
     return false
 end
 
-local function updateBotField(turtle, fields, field_key, is_connection_field)
+local function updateBotField(turtle, fields, field_key, field_changed_functor)
     field_value = fields[field_key]
     if field_value then
         if turtle[field_key] ~= field_value then
-            if is_connection_field then turtle:stopListen() end
             turtle[field_key] = field_value
+            if field_changed_functor ~= nil then
+                field_changed_functor()
+            end
         end
     end
 end
@@ -57,9 +85,12 @@ minetest.register_on_player_receive_fields(
                                                string.len(
                                                    FORMNAME_TURTLE_INVENTORY)))
             local turtle = getTurtle(id)
-            updateBotField(turtle, fields, "name", false)
-            updateBotField(turtle, fields, "host_ip", true)
-            updateBotField(turtle, fields, "host_port", true)
+            updateBotField(turtle, fields, "name",
+                           function() turtle:update_nametag() end)
+            updateBotField(turtle, fields, "host_ip",
+                           function() turtle:stopListen() end)
+            updateBotField(turtle, fields, "host_port",
+                           function() turtle:stopListen() end)
             if fields.listen then
                 if turtle.is_listening then
                     turtle:stopListen()
@@ -136,26 +167,8 @@ local TurtleEntity = {
         physical = true,
         collisionbox = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5},
 
-        -- -- failed attempt: gives autorotating flat image
-        -- drawtype = "nodebox",
-        -- node_box = {
-        --     type = "fixed",
-        --     fixed = {
-        --         {-0.5, -0.5, -0.5, 0.5, 0, 0.5}, {-0.5, 0, 0, 0.5, 0.5, 0.5}
-        --     }
-        -- },
-
         visual = "mesh",
         mesh = "turtle_base.b3d",
-        textures = {"turtle_base_model_texture.png"},
-
-        -- previously working with visual = "cube"
-        -- visual = "cube",
-        -- visual_size = {x = 0.9, y = 0.9},
-        -- textures = {
-        --     "adabots_top.png", "adabots_bottom.png", "adabots_right.png",
-        --     "adabots_left.png", "adabots_back.png", "adabots_front.png"
-        -- },
 
         static_save = true, -- Make sure it gets saved statically
         automatic_rotate = 0,
@@ -431,7 +444,14 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     end
 
     -- Restart listening
-    if self.is_listening then self:listen() end
+    if self.is_listening then
+        self:listen()
+        self:setAwakeTexture()
+    else
+        self:setSleepingTexture()
+    end
+
+    self:update_nametag()
 
     -- Keep items from save
     if data.inv ~= nil then deserializeInventory(self.inv, data.inv) end
@@ -453,6 +473,78 @@ function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities,
     if time_from_last_punch < 0.5 then
         minetest.debug("double clicked " .. self.name)
     end
+end
+
+local function generate_line(s, ypos)
+    local i = 1
+    local parsed = {}
+    local width = 0
+    local chars = 0
+    local printed_char_width = CHAR_WIDTH + 1
+    while chars < LINE_LENGTH and i <= #s do
+        local file
+        -- Get and render character
+        if charmap[s:sub(i, i)] then
+            file = charmap[s:sub(i, i)]
+            i = i + 1
+        elseif i < #s and charmap[s:sub(i, i + 1)] then
+            file = charmap[s:sub(i, i + 1)]
+            i = i + 2
+        else
+            -- No character image found.
+            -- Use replacement character:
+            file = "_rc"
+            i = i + 1
+            minetest.log("verbose",
+                         "[mcl_signs] Unknown symbol in '" .. s .. "' at " .. i)
+        end
+        if file then
+            width = width + printed_char_width
+            table.insert(parsed, file)
+            chars = chars + 1
+        end
+    end
+    width = width - 1
+
+    local texture = ""
+    local xpos = math.floor((SIGN_WIDTH - width) / 2)
+    for i = 1, #parsed do
+        texture = texture .. ":" .. xpos .. "," .. ypos .. "=" .. parsed[i] ..
+                      ".png"
+        xpos = xpos + printed_char_width
+    end
+    return texture
+end
+
+-- modified from mcl_signs in MineClone5
+local function generate_texture(text)
+    local ypos = 0
+    local texture = "[combine:" .. SIGN_WIDTH .. "x" .. SIGN_WIDTH ..
+                        generate_line(text, ypos)
+    return texture
+end
+
+function TurtleEntity:update_nametag()
+    local pos = self:getLocRelative(0, 1, 0)
+
+    minetest.debug("Updating nametag to " .. self.name)
+    -- remove if we already have one
+    if self.text_entity then self.text_entity:remove() end
+
+    self.text_entity = minetest.add_entity({x = 0, y = 0, z = 0},
+                                           "mcl_signs:text")
+    local relative_position = {
+        x = NAMETAG_DELTA_X,
+        y = NAMETAG_DELTA_Y,
+        z = NAMETAG_DELTA_Z
+    }
+    local relative_rotation = {x = 0, y = 0, z = 0}
+    self.text_entity:set_attach(self.object, "", relative_position,
+                                relative_rotation)
+    self.text_entity:get_luaentity()._signnodename = "mcl_signs:standing_sign"
+    self.text_entity:set_properties({textures = {generate_texture(self.name)}})
+
+    self.text_entity:set_yaw(0)
 end
 
 function TurtleEntity:get_staticdata()
@@ -581,6 +673,7 @@ function TurtleEntity:dropDown(amount)
 end
 
 function TurtleEntity:stopListen()
+    self:setSleepingTexture()
     self.is_listening = false
     self.adabots_server = ""
     minetest.debug("Stopped listening")
@@ -656,6 +749,7 @@ local function update_adabots(self)
 end
 
 function TurtleEntity:listen()
+    self:setAwakeTexture()
     self.is_listening = true
     self.adabots_server = "http://" .. self.host_ip .. ":" .. self.host_port
     minetest.debug("listening on " .. self.adabots_server)
@@ -775,6 +869,18 @@ function TurtleEntity:itemRefuel(turtleslot)
     return true
 end
 
+function TurtleEntity:setTexture(newTexture)
+    self.object:set_properties({textures = {newTexture}})
+end
+
+function TurtleEntity:setSleepingTexture()
+    self:setTexture("turtle_base_model_texture_sleeping.png")
+end
+
+function TurtleEntity:setAwakeTexture()
+    self:setTexture("turtle_base_model_texture.png")
+end
+
 function TurtleEntity:getFuel() return self.fuel end
 function TurtleEntity:isTurtleslotEmpty(turtleslot)
     return self:getTurtleslot(turtleslot):is_empty()
@@ -788,10 +894,6 @@ function TurtleEntity:autoRefuel()
         turtle:itemRefuel(turtleslot)
     end
     return false
-end
-function TurtleEntity:setName(name)
-    self.name = minetest.formspec_escape(name)
-    self.nametag = self.name
 end
 
 function TurtleEntity:debug(string)

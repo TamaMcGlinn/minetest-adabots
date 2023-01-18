@@ -1,6 +1,6 @@
---[[
-    The turtle block is only used when holding a turtle as a block in your hand spawn the turtle entity, then it deletes itself
-]] minetest.register_node("adabots:turtle", {
+-- The turtle block is only used when holding a turtle as a block in your hand
+-- and immediately after placement, to spawn the turtle entity, then it deletes itself
+minetest.register_node("adabots:turtle", {
     description = "Turtle",
 
     tiles = {
