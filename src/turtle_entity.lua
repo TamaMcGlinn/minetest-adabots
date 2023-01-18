@@ -436,7 +436,16 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     self.autoRefuel = data.autoRefuel or true
     self.codeUncompiled = data.codeUncompiled or ""
 
-    -- Give her an inventory
+    if not self.pickaxe then
+        self.pickaxe = minetest.add_entity({x = 0, y = 0, z = 0},
+                                           "adabots:diamond_pickaxe")
+        local relative_position = {x = 0, y = 0, z = 0}
+        local relative_rotation = {x = 0, y = 0, z = 0}
+        self.pickaxe:set_attach(self.object, "", relative_position,
+                                relative_rotation)
+    end
+
+    -- Create inventory
     self.inv_name = "adabots:turtle:" .. self.id
     self.inv_fullname = "detached:" .. self.inv_name
     self.inv = minetest.create_detached_inventory(self.inv_name, {})
@@ -912,3 +921,25 @@ end
 function TurtleEntity:dump(object) return dump(object) end
 
 minetest.register_entity("adabots:turtle", TurtleEntity)
+
+local PickaxeEntity = {
+    initial_properties = {
+        is_visible = true,
+        makes_footstep_sound = false,
+        physical = false,
+
+        visual = "mesh",
+        mesh = "pickaxe.b3d",
+        textures = {"pickaxe_diffuse.png"},
+        visual_size = {x = 1, y = 1, z = 1},
+
+        static_save = false,
+        automatic_rotate = 0,
+        id = -1,
+
+        -- ensure clicks go through to the turtle
+        pointable = false
+    }
+}
+
+minetest.register_entity("adabots:diamond_pickaxe", PickaxeEntity)
