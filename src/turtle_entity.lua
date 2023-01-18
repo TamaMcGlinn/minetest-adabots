@@ -169,6 +169,7 @@ local TurtleEntity = {
 
         visual = "mesh",
         mesh = "turtle_base.b3d",
+        textures = {"turtle_base_model_texture.png"},
 
         static_save = true, -- Make sure it gets saved statically
         automatic_rotate = 0,
@@ -869,16 +870,22 @@ function TurtleEntity:itemRefuel(turtleslot)
     return true
 end
 
-function TurtleEntity:setTexture(newTexture)
-    self.object:set_properties({textures = {newTexture}})
-end
-
 function TurtleEntity:setSleepingTexture()
-    self:setTexture("turtle_base_model_texture_sleeping.png")
+    if self.light_blocker ~= nil then self.light_blocker:remove() end
+    self.light_blocker = minetest.add_entity({x = 0, y = 0, z = 0},
+                                             "mcl_signs:text")
+    local relative_position = {x = 2.25, y = -23.25, z = 3.625}
+    local relative_rotation = {x = 0, y = 0, z = 0}
+    self.light_blocker:set_attach(self.object, "", relative_position,
+                                  relative_rotation)
+    self.light_blocker:set_properties({visual_size = {x = 1, y = 5}})
+    self.light_blocker:get_luaentity()._signnodename = "mcl_signs:standing_sign"
+    self.light_blocker:set_properties({textures = {generate_texture("__")}})
+    self.light_blocker:set_yaw(0)
 end
 
 function TurtleEntity:setAwakeTexture()
-    self:setTexture("turtle_base_model_texture.png")
+    if self.light_blocker ~= nil then self.light_blocker:remove() end
 end
 
 function TurtleEntity:getFuel() return self.fuel end
