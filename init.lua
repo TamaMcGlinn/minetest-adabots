@@ -2,7 +2,7 @@ adabots = {
     config = {
         -- Turtles are yielded after every instruction
         -- This is how long timed turtle actions take, such as mining, moving, and placing
-        turtle_tick = .5, --Default: 0.5 seconds
+        turtle_tick = .3, -- Default: 0.3 seconds
         --Fuel inside of turtles when they spawn
         fuel_initial = 1000, --Default: 1000 actions
         --Allows turtle:debug(string) to go to debug.txt
