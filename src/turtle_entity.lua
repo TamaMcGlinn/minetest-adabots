@@ -698,7 +698,7 @@ local function is_command_approved(turtle_command)
         "forward", "turnLeft", "turnRight", "back", "up", "down"
     }
     for _, dc in pairs(direct_commands) do
-        if turtle_command == "turtle%." .. dc .. "%(%)" then return true end
+        if turtle_command == "turtle." .. dc .. "()" then return true end
     end
     local single_number_commands = {"select", "drop", "dropUp", "dropDown"}
     for _, snc in pairs(single_number_commands) do
