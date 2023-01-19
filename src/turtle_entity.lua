@@ -161,7 +161,6 @@ end)
 
 local TurtleEntity = {
     initial_properties = {
-        hp_max = 20,
         is_visible = true,
         makes_footstep_sound = false,
         physical = true,
