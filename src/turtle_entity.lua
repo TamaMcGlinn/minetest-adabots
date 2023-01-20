@@ -201,6 +201,86 @@ function TurtleEntity:inspectnode(nodeLocation)
   return "minecraft:" .. result.name
 end
 
+-- Get items loose in the world, up to maxAmount (pass 0 for infinite)
+-- Put them into the turtle inventory at the first viable location starting
+-- from the selected slot.
+-- Returns true if any items were retrieved
+-- Returns false only if unable to get any items
+function TurtleEntity:gather_items(nodeLocation, maxAmount)
+  -- TODO implement
+  return false
+end
+
+-- Get items, either those loose in the world, or in an inventory
+-- at the nodeLocation given. As many items as possible are retrieved,
+-- up to the amount specified.
+-- Pass 1 iteratively for more precision, or pass 0 to retrieve infinite items.
+-- If loose items are present, only those are picked up.
+-- Put them into the turtle inventory at the first viable location starting
+-- from the selected slot.
+-- Returns true if any items were retrieved
+-- Returns false only if unable to get any items
+function TurtleEntity:sucknode(nodeLocation, maxAmount)
+  if self:gather_items(nodeLocation, maxAmount) then
+    return true
+  end
+
+  local chest = minetest.get_inventory({type = "node", pos = nodeLocation})
+  if chest == nil then
+    return false
+  end
+
+  local chest_listname = "main"
+  local chestsize = chest:get_size(chest_listname)
+
+  local remaining_items = maxAmount -- can't directly modify maxAmount because 0 means 'take infinite'
+  local picked_up_items = 0
+  for i = 1, chestsize do
+    local chest_stack = chest:get_stack(chest_listname, i)
+    if chest_stack == nil then
+      minetest.debug("unexpected error in sucknode: stack is nil")
+      return false
+    end
+
+    local stack_count = chest_stack:get_count()
+
+    -- do you want the whole stack?
+    if maxAmount == 0 or stack_count <= remaining_items then
+      remaining_stack = self.inv:add_item("main", chest_stack)
+      local remaining_count = remaining_stack:get_count()
+      local picked_up_this_iteration = stack_count - remaining_count
+      picked_up_items = picked_up_items + picked_up_this_iteration
+      if remaining_count == 0 then
+        chest:remove_item(chest_listname, chest_stack)
+      else
+        -- you can't HANDLE the whole stack!
+        chest:set_stack(chest_listname, i, remaining_stack)
+      end
+      remaining_items = remaining_items - picked_up_this_iteration
+    else
+      local remaining_count = stack_count - remaining_items
+      local stack_to_add = chest_stack
+      stack_to_add:set_count(remaining_items)
+      local leftover_stack = self.inv:add_item("main", stack_to_add)
+      -- leftover_itemcount is normally 0, otherwise it means we couldn't fit the desired amount from this inventory stack
+      local leftover_itemcount = leftover_stack:get_count()
+      local picked_up_this_iteration = remaining_count - leftover_itemcount
+      picked_up_items = picked_up_items + picked_up_this_iteration
+      local remaining_stack = chest_stack
+      remaining_stack:set_count(remaining_count + leftover_itemcount)
+      chest:set_stack(chest_listname, i, remaining_stack)
+      remaining_items = remaining_items - picked_up_this_iteration
+    end
+    if remaining_items == 0 then
+      return true
+    end
+  end
+
+  if picked_up_items > 0 then
+    return true
+  end
+end
+
 function TurtleEntity:detectnode(nodeLocation)
   return self:inspectnode(nodeLocation) ~= "minecraft:air"
 end
@@ -630,6 +710,10 @@ function TurtleEntity:inspect() return self:inspectnode(self:getLocForward()) en
 function TurtleEntity:inspectUp() return self:inspectnode(self:getLocUp()) end
 function TurtleEntity:inspectDown() return self:inspectnode(self:getLocDown()) end
 
+function TurtleEntity:suck(slot_number) return self:sucknode(self:getLocForward(), slot_number) end
+function TurtleEntity:suckUp(slot_number) return self:sucknode(self:getLocUp(), slot_number) end
+function TurtleEntity:suckDown(slot_number) return self:sucknode(self:getLocDown(), slot_number) end
+
 function TurtleEntity:drop(amount)
   return self:itemDrop(self:getLocForward(), amount)
 end
@@ -672,18 +756,28 @@ local function is_command_approved(turtle_command)
   for _, dc in pairs(direct_commands) do
     if turtle_command == "turtle." .. dc .. "()" then return true end
   end
-  local single_number_commands = {"select", "drop", "dropUp", "dropDown"}
+  local single_number_commands = {"select"}
   for _, snc in pairs(single_number_commands) do
     if turtle_command:find("^turtle%." .. snc .. "%( *%d+%)$") ~= nil then
       return true
     end
   end
-  local location_commands = {"dig", "place", "detect", "inspect"}
+  local location_commands = {"dig", "place", "detect", "inspect", "suck"}
   local locations = {"", "Up", "Down"}
   for _, lc in pairs(location_commands) do
     for _, loc in pairs(locations) do
       local pattern = "^turtle%." .. lc .. loc .. "%(%)$"
       if turtle_command:find(pattern) ~= nil then return true end
+    end
+  end
+  local single_number_location_commands = {"drop", "suck"}
+  for _, snlc in pairs(single_number_location_commands) do
+    for _, loc in pairs(locations) do
+      local pattern = "^turtle%." .. snlc .. loc .. "%( *%d+%)$"
+      if turtle_command:find(pattern) ~= nil then
+        return true
+      end
+      -- minetest.debug(turtle_command .. " does not match " .. pattern)
     end
   end
   return false
@@ -692,6 +786,7 @@ end
 function TurtleEntity:fetch_adabots_instruction()
   local server_url = self:get_server_url()
   if server_url == nil or server_url == "" then return end
+  -- minetest.debug("fetching from " .. server_url)
   http_api.fetch({url = server_url, timeout = 1}, function(res)
     if res.succeeded then
       local result = ""
@@ -714,7 +809,7 @@ function TurtleEntity:fetch_adabots_instruction()
           result = "error: invalid lua expression " .. command
         end
       end
-      -- minetest.debug(res.data .. " returned " .. result)
+      minetest.debug(res.data .. " returned " .. result)
 
       http_api.fetch({
         url = server_url .. "/return_value/" .. result,
@@ -885,3 +980,4 @@ local PickaxeEntity = {
 }
 
 minetest.register_entity("adabots:diamond_pickaxe", PickaxeEntity)
+
