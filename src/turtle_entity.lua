@@ -211,6 +211,26 @@ function TurtleEntity:gather_items(nodeLocation, maxAmount)
   return false
 end
 
+-- Add the stack to the first available slot starting at the selected slot
+-- return a stack of the items that could not fit
+function TurtleEntity:add_item(stack)
+  local leftover_stack = stack
+  for i = 0, TURTLE_INVENTORYSIZE-1 do
+    local slot = ((self.selected_slot + i - 1) % TURTLE_INVENTORYSIZE) + 1
+    local current_stack = self.inv:get_stack("main", slot)
+    if current_stack == nil then
+      minetest.debug("Error: turtle slot " .. slot .. " has nil stack")
+      return leftover_stack
+    end
+    leftover_stack = current_stack:add_item(leftover_stack)
+    self.inv:set_stack("main", slot, current_stack)
+    if leftover_stack:get_count() == 0 then
+      return leftover_stack
+    end
+  end
+  return leftover_stack
+end
+
 -- Get items, either those loose in the world, or in an inventory
 -- at the nodeLocation given. As many items as possible are retrieved,
 -- up to the amount specified.
@@ -246,22 +266,17 @@ function TurtleEntity:sucknode(nodeLocation, maxAmount)
 
     -- do you want the whole stack?
     if maxAmount == 0 or stack_count <= remaining_items then
-      remaining_stack = self.inv:add_item("main", chest_stack)
+      remaining_stack = self:add_item(chest_stack)
       local remaining_count = remaining_stack:get_count()
       local picked_up_this_iteration = stack_count - remaining_count
       picked_up_items = picked_up_items + picked_up_this_iteration
-      if remaining_count == 0 then
-        chest:remove_item(chest_listname, chest_stack)
-      else
-        -- you can't HANDLE the whole stack!
-        chest:set_stack(chest_listname, i, remaining_stack)
-      end
+      chest:set_stack(chest_listname, i, remaining_stack)
       remaining_items = remaining_items - picked_up_this_iteration
     else
       local remaining_count = stack_count - remaining_items
       local stack_to_add = chest_stack
       stack_to_add:set_count(remaining_items)
-      local leftover_stack = self.inv:add_item("main", stack_to_add)
+      local leftover_stack = self:add_item(stack_to_add)
       -- leftover_itemcount is normally 0, otherwise it means we couldn't fit the desired amount from this inventory stack
       local leftover_itemcount = leftover_stack:get_count()
       local picked_up_this_iteration = remaining_count - leftover_itemcount
@@ -276,9 +291,7 @@ function TurtleEntity:sucknode(nodeLocation, maxAmount)
     end
   end
 
-  if picked_up_items > 0 then
-    return true
-  end
+  return picked_up_items > 0
 end
 
 function TurtleEntity:detectnode(nodeLocation)
