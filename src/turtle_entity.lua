@@ -761,7 +761,7 @@ end
 
 local function is_command_approved(turtle_command)
   local direct_commands = {
-    "forward", "turnLeft", "turnRight", "back", "up", "down"
+    "forward", "turnLeft", "turnRight", "back", "up", "down", "getSelectedSlot"
   }
   for _, dc in pairs(direct_commands) do
     if turtle_command == "turtle." .. dc .. "()" then return true end
