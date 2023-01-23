@@ -707,6 +707,10 @@ function TurtleEntity:select(slot)
 end
 
 function TurtleEntity:getSelectedSlot() return self.selected_slot end
+function TurtleEntity:getItemCount(slot_number)
+  local stack = self:getTurtleslot(slot_number)
+  return stack:get_count()
+end
 
 function TurtleEntity:dig() return self:mine(self:getLocForward()) end
 function TurtleEntity:digUp() return self:mine(self:getLocUp()) end
@@ -766,7 +770,7 @@ local function is_command_approved(turtle_command)
   for _, dc in pairs(direct_commands) do
     if turtle_command == "turtle." .. dc .. "()" then return true end
   end
-  local single_number_commands = {"select"}
+  local single_number_commands = {"select", "getItemCount"}
   for _, snc in pairs(single_number_commands) do
     if turtle_command:find("^turtle%." .. snc .. "%( *%d+%)$") ~= nil then
       return true
