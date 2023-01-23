@@ -179,15 +179,12 @@ function TurtleEntity:build(nodeLocation)
   -- Build and consume item
   local stack = self:getTurtleslot(self.selected_slot)
   if stack:is_empty() then return false end
-  local newstack, position_placed = minetest.item_place_node(stack, nil, {
+  local newstack, position_placed = minetest.item_place(stack, nil, {
     type = "node",
     under = nodeLocation,
     above = self:getLoc()
   })
-
-  -- consume item
-  stack:set_count(stack:get_count() - 1)
-  self.inv:set_stack("main", self.selected_slot, stack)
+  self.inv:set_stack("main", self.selected_slot, newstack)
 
   if position_placed == nil then
     return false
