@@ -34,6 +34,22 @@ local NAMETAG_DELTA_Z = -2
 ---@returns TurtleEntity of that ID
 local function getTurtle(id) return adabots.turtles[id] end
 
+---@returns whether the host-port pair is free (only one turtle can listen on each host-port pair)
+local function checkPortFree(host, port_number)
+  for i = 1, adabots.num_turtles do
+    local bot = adabots.turtles[i]
+    if bot == nil then
+      minetest.debug("Error: nil bot")
+    else
+      if bot.is_listening and (host == bot.host_ip) and (port_number == bot.host_port) then
+        minetest.debug("Error: " .. bot.name .. " is already listening on " .. host .. ":" .. port_number)
+        return false
+      end
+    end
+  end
+  return true
+end
+
 ---@returns true if given index is in range [1, TURTLE_INVENTORYSIZE]
 local function isValidInventoryIndex(index)
   return 0 < index and index <= TURTLE_INVENTORYSIZE
@@ -95,8 +111,10 @@ minetest.register_on_player_receive_fields(
       updateBotField(turtle, fields, "host_port",
         function() turtle:stopListen() refresh() end)
       if fields.listen then
-        turtle:toggle_is_listening()
-        refresh()
+        if turtle.is_listening or checkPortFree(turtle.host_ip, turtle.host_port) then
+          turtle:toggle_is_listening()
+          refresh()
+        end
         return true
       end
       if fields.forward then turtle:forward(true) end
