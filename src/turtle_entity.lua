@@ -160,9 +160,29 @@ function TurtleEntity:setTurtleslot(turtleslot, stack)
   return true
 end
 
+function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
 function TurtleEntity:move(nodeLocation)
   -- Verify new pos is empty
-  if nodeLocation == nil or minetest.get_node(nodeLocation).name ~= "air" then
+  if nodeLocation == nil then
+    minetest.debug("Error: can't move into nil node")
+    return false
+  end
+  local node = minetest.get_node(nodeLocation)
+  local node_name = node.name
+  node_registration = minetest.registered_nodes[node_name]
+  if node_registration.walkable then
     return false
   end
   -- Take Action
