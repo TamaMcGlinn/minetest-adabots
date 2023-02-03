@@ -173,16 +173,20 @@ function dump(o)
    end
 end
 
-function TurtleEntity:move(nodeLocation)
-  -- Verify new pos is empty
+function node_walkable(nodeLocation)
   if nodeLocation == nil then
-    minetest.debug("Error: can't move into nil node")
+    minetest.debug("Error: testing nil node for walkability")
     return false
   end
   local node = minetest.get_node(nodeLocation)
   local node_name = node.name
   node_registration = minetest.registered_nodes[node_name]
-  if node_registration.walkable then
+  return node_registration.walkable
+end
+
+function TurtleEntity:move(nodeLocation)
+  -- Verify new pos is empty
+  if node_walkable(nodeLocation) then
     return false
   end
   -- Take Action
@@ -209,10 +213,7 @@ function TurtleEntity:mine(nodeLocation)
 end
 
 function TurtleEntity:build(nodeLocation)
-  if nodeLocation == nil then return false end
-
-  local node = minetest.get_node(nodeLocation)
-  if node.name ~= "air" then return false end
+  if node_walkable(nodeLocation) then return false end
 
   -- Build and consume item
   local stack = self:getTurtleslot(self.selected_slot)
