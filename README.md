@@ -1,26 +1,32 @@
-# Adabots
+# [Adabots - adabots.net](adabots.net)
 
-This fork of [computertest](https://github.com/zaners123/Computertest) allows you to run [Adabots](https://github.com/TamaMcGlinn/AdaBots) using minetest instead of minecraft.
-I have also done a few fixes as necessary to get the [ComputerCraft turtle API](https://tweaked.cc/module/turtle.html) working.
+This minetest mod allows you to run [Adabots](https://github.com/TamaMcGlinn/AdaBots). If you want to use Minecraft, follow [these instructions instead](https://github.com/TamaMcGlinn/AdaBots/blob/main/docs/minecraft_installation.md).
 
-After installing, go to Settings > All Settings and search for "secure", in order to set httpmods to include `adabots`.
+## Setup
 
-Then give yourself a turtle, place it and right click it. In the command window, enter `turtle:listen()` to start listening on the default server/port/tickrate.
+Install [this version of minetest 5.6.0](https://github.com/TamaMcGlinn/minetest) by following the compilation steps from source.
+In the content tab, select MineClone 5. Create a world, and ensure that under Mods, the MineClone 5 mods are selected and also adabots.
+Go to Settings > All Settings and search for "secure", in order to set httpmods field to include `adabots`.
 
-turtle:listen takes three parameters:
-- ip address (defaults to "localhost")
-- port (defaults to "7112")
-- tickrate in seconds (defaults to 0.3)
+## In game usage
 
-Another example call to put in the turtle's command window would be `turtle:listen("192.168.0.22", "7112", 0.1)`
-to get a faster turtle listening to a different machine on your LAN.
+Start the world in creative mode and give yourself a turtle, place it and right click it. In the interface, put the IP address and port you would like to listen to.
+The host IP address is the IP address of the computer that will run an Adabots program; leave it at localhost if on the same machine.
+The host port can be specified in your Adabots program, and will default to 7112:
+
+```Ada
+Bot : constant Adabots.Turtle := Adabots.Create_Turtle; -- outputs commands on port 7112
+Other_Bot : constant Adabots.Turtle := Adabots.Create_Turtle (7113); -- outputs commands on port 7113
+```
 
 ## Working Features
 
-- Movement, mining and placing works
+- Movement, mining and building
+- Detecting if there is a block
+- Selecting an inventory slot
+- Getting items from chests
 
 ## Features to Add
 
-- Selecting an inventory slot
-- Inventory management commands, such as crafting and sorting
-- The turtle code isn't sandboxed, so turtles could call dangerous functions. This has been mitigated by the "adabots" privilege, but proper sandboxing would work best.
+- Looking what kind of block there is
+- Crafting
