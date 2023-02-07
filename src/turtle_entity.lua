@@ -110,12 +110,16 @@ minetest.register_on_player_receive_fields(
             updateBotField(turtle, fields, "name",
                            function() turtle:update_nametag() end)
             updateBotField(turtle, fields, "host_ip", function()
-                turtle:stopListen()
-                refresh()
+                if turtle.is_listening then
+                    turtle:stopListen()
+                    refresh()
+                end
             end)
             updateBotField(turtle, fields, "host_port", function()
-                turtle:stopListen()
-                refresh()
+                if turtle.is_listening then
+                    turtle:stopListen()
+                    refresh()
+                end
             end)
             if fields.listen then
                 if turtle.is_listening or
