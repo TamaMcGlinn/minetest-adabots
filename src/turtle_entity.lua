@@ -441,17 +441,17 @@ function TurtleEntity:get_formspec_inventory()
             "image_button[4,3.85;1,0.55;arrows_down.png;downward;]" ..
             "tooltip[downward;Go down]"
 
-    local connection_settings = "style_type[field;font_size=20]" ..
+    local connection_settings = "style_type[field;font_size=16]" ..
                                     "label[0.4,2.0;" ..
                                     F(
                                         minetest.colorize("#313131",
                                                           "Connection settings")) ..
-                                    "]" .. "field[0.6,2.9;2.7,0.5;host_ip;;" ..
+                                    "]" .. "field[0.3,2.9;3.0,0.5;host_ip;;" ..
                                     F(
                                         minetest.colorize("#313131",
                                                           self.host_ip or
                                                               "localhost")) ..
-                                    "]" .. "field[3.2,2.9;1,0.5;host_port;;" ..
+                                    "]" .. "field[3.2,2.9;1.1,0.5;host_port;;" ..
                                     F(
                                         minetest.colorize("#313131",
                                                           self.host_port or
