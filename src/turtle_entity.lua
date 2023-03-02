@@ -4,6 +4,7 @@ local S = minetest.get_translator(minetest.get_current_modname())
 local F = minetest.formspec_escape
 
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
+local FORMNAME_TURTLE_CONTROLPANEL = "adabots:turtle:controlpanel:"
 
 local TURTLE_INVENTORYSIZE = 4 * 4
 
@@ -98,43 +99,70 @@ minetest.register_on_player_receive_fields(
             return string.sub(formname, 1, string.len(name)) == name
         end
         if isForm(FORMNAME_TURTLE_INVENTORY) then
-            local id = tonumber(string.sub(formname, 1 +
-                                               string.len(
-                                                   FORMNAME_TURTLE_INVENTORY)))
-            local turtle = getTurtle(id)
-            local function refresh()
-                minetest.show_formspec(player:get_player_name(),
-                                       FORMNAME_TURTLE_INVENTORY .. turtle.id,
-                                       turtle:get_formspec_inventory())
-            end
+          turtleform = FORMNAME_TURTLE_INVENTORY
+        end
+        if isForm(FORMNAME_TURTLE_CONTROLPANEL) then
+          turtleform = FORMNAME_TURTLE_CONTROLPANEL
+        end
+        local function get_turtle()
+          local number_suffix = string.sub(formname, 1 + string.len(turtleform))
+          local id = tonumber(number_suffix)
+          return getTurtle(id)
+        end
+        local turtle = get_turtle()
+        local function refresh(turtleform)
+            minetest.show_formspec(player:get_player_name(),
+                                   turtleform .. turtle.id,
+                                   turtle:get_formspec_inventory())
+        end
+        local function respond_to_common_controls()
+          if fields.close then minetest.close_formspec(player:get_player_name(), formname) end
+          if fields.arrow_forward then turtle:forward(true) end
+          if fields.arrow_backward then turtle:back(true) end
+          if fields.arrow_turnleft then turtle:turnLeft(true) end
+          if fields.arrow_turnright then turtle:turnRight(true) end
+          if fields.arrow_up then turtle:up(true) end
+          if fields.arrow_down then turtle:down(true) end
+          if fields.mine then turtle:dig(true) end
+          if fields.mine_up then turtle:digUp(true) end
+          if fields.mine_down then turtle:digDown(true) end
+          if fields.place then turtle:place(true) end
+          if fields.place_up then turtle:placeUp(true) end
+          if fields.place_down then turtle:placeDown(true) end
+          if fields.listen then
+              if turtle.is_listening or
+                  checkPortFree(turtle.host_ip, turtle.host_port) then
+                  turtle:toggle_is_listening()
+                  refresh(turtleform)
+              end
+              return true
+          end
+        end
+        if isForm(FORMNAME_TURTLE_INVENTORY) then
             updateBotField(turtle, fields, "name",
                            function() turtle:update_nametag() end)
             updateBotField(turtle, fields, "host_ip", function()
                 if turtle.is_listening then
                     turtle:stopListen()
-                    refresh()
+                    refresh(turtleform)
                 end
             end)
             updateBotField(turtle, fields, "host_port", function()
                 if turtle.is_listening then
                     turtle:stopListen()
-                    refresh()
+                    refresh(turtleform)
                 end
             end)
-            if fields.listen then
-                if turtle.is_listening or
-                    checkPortFree(turtle.host_ip, turtle.host_port) then
-                    turtle:toggle_is_listening()
-                    refresh()
-                end
-                return true
+            if fields.open_controlpanel then
+              -- minetest.close_formspec(player:get_player_name(), formname)
+              minetest.show_formspec(player:get_player_name(),
+                FORMNAME_TURTLE_CONTROLPANEL .. turtle.id,
+                turtle:get_formspec_controlpanel())
             end
-            if fields.forward then turtle:forward(true) end
-            if fields.backward then turtle:back(true) end
-            if fields.turnleft then turtle:turnLeft(true) end
-            if fields.turnright then turtle:turnRight(true) end
-            if fields.upward then turtle:up(true) end
-            if fields.downward then turtle:down(true) end
+            respond_to_common_controls()
+            return true
+        elseif isForm(FORMNAME_TURTLE_CONTROLPANEL) then
+            respond_to_common_controls()
             return true
         else
             return false -- Unknown formname, input not processed
@@ -428,18 +456,21 @@ function TurtleEntity:get_formspec_inventory()
                                  ";listen;]tooltip[listen;Start/stop listening]"
 
     local movement_buttons =
-        "image_button[0,3.4;1,1;arrow_forward.png;forward;]" ..
-            "tooltip[forward;Move forward]" ..
-            "image_button[1,3.4;1,1;arrow_backward.png;backward;]" ..
-            "tooltip[backward;Move backward]" ..
-            "image_button[2,3.4;1,1;arrow_turnleft.png;turnleft;]" ..
-            "tooltip[turnleft;Turn left]" ..
-            "image_button[3,3.4;1,1;arrow_turnright.png;turnright;]" ..
-            "tooltip[turnright;Turn right]" ..
-            "image_button[4,3.4;1,0.55;arrows_up.png;upward;]" ..
-            "tooltip[upward;Go up]" ..
-            "image_button[4,3.85;1,0.55;arrows_down.png;downward;]" ..
-            "tooltip[downward;Go down]"
+        "image_button[0,3.4;1,1;arrow_forward.png;arrow_forward;]" ..
+            "tooltip[arrow_forward;Move forward]" ..
+            "image_button[1,3.4;1,1;arrow_backward.png;arrow_backward;]" ..
+            "tooltip[arrow_backward;Move backward]" ..
+            "image_button[2,3.4;1,1;arrow_turnleft.png;arrow_turnleft;]" ..
+            "tooltip[arrow_turnleft;Turn left]" ..
+            "image_button[3,3.4;1,1;arrow_turnright.png;arrow_turnright;]" ..
+            "tooltip[arrow_turnright;Turn right]"
+    local controlpanel_button =
+        "image_button[4,3.4;1,1;open_controlpanel.png;open_controlpanel;]" ..
+        "tooltip[open_controlpanel;Open controlpanel]"
+
+
+
+
 
     local connection_settings = "style_type[field;font_size=16]" ..
                                     "label[0.4,2.0;" ..
@@ -491,9 +522,62 @@ function TurtleEntity:get_formspec_inventory()
 
     return
         general_settings .. turtle_image .. turtle_name .. playpause_button ..
-            movement_buttons .. connection_settings .. turtle_inventory ..
+            movement_buttons .. controlpanel_button .. connection_settings .. turtle_inventory ..
             turtle_selection .. turtle_inventory_items .. player_inventory ..
             player_inventory_items
+end
+
+function TurtleEntity:get_formspec_controlpanel()
+  local listening = self.is_listening
+  local sleeping_image = ""
+  local playpause_image = "pause_btn.png"
+  if not listening then
+    playpause_image = "play_btn.png"
+  end
+
+  local general_settings =
+	  "formspec_version[4]" ..
+	  "size[25,12]" ..
+	  "no_prepend[]" ..
+	  "bgcolor[#00000000]" ..
+	  "background[0,0;25,12;controlpanel_bg.png]" ..
+    "options[key_event=true]" ..
+	  "style_type[button;noclip=true]"
+
+
+  -- 
+  -- X  ↑  ↟  ⇑  ⇈
+  -- ↶     ↷  m  p
+  --    ↓  ↡  ⇓  ⇊
+  
+  local start = { ['x'] = 19.6, ['y'] = 7.6 }
+  -- local playpause_button = "image_button[" .. start.x + 1 .. "," .. start.y .. ";1,1;" .. playpause_image ..
+  --   ";listen;]tooltip[listen;Start/stop listening]"
+  
+  local button_table = {
+    { ['name'] = 'close',           ['offset'] = { ['x'] = 0, ['y'] = 1 }, ['tooltip'] = 'Close' },
+    { ['name'] = 'arrow_forward',   ['offset'] = { ['x'] = 1, ['y'] = 1 }, ['tooltip'] = 'Move forward' },
+    { ['name'] = 'arrow_backward',  ['offset'] = { ['x'] = 1, ['y'] = 3 }, ['tooltip'] = 'Move backward' },
+    { ['name'] = 'arrow_turnleft',  ['offset'] = { ['x'] = 0, ['y'] = 2 }, ['tooltip'] = 'Turn left' },
+    { ['name'] = 'arrow_turnright', ['offset'] = { ['x'] = 2, ['y'] = 2 }, ['tooltip'] = 'Turn right' },
+    { ['name'] = 'arrow_up',        ['offset'] = { ['x'] = 2, ['y'] = 1 }, ['tooltip'] = 'Move up' },
+    { ['name'] = 'arrow_down',      ['offset'] = { ['x'] = 2, ['y'] = 3 }, ['tooltip'] = 'Move down' },
+    { ['name'] = 'mine_up',         ['offset'] = { ['x'] = 3, ['y'] = 1 }, ['tooltip'] = 'Dig up' },
+    { ['name'] = 'mine',            ['offset'] = { ['x'] = 3, ['y'] = 2 }, ['tooltip'] = 'Dig forward' },
+    { ['name'] = 'mine_down',       ['offset'] = { ['x'] = 3, ['y'] = 3 }, ['tooltip'] = 'Dig down' },
+    { ['name'] = 'place_up',        ['offset'] = { ['x'] = 4, ['y'] = 1 }, ['tooltip'] = 'Place up' },
+    { ['name'] = 'place',           ['offset'] = { ['x'] = 4, ['y'] = 2 }, ['tooltip'] = 'Place forward' },
+    { ['name'] = 'place_down',      ['offset'] = { ['x'] = 4, ['y'] = 3 }, ['tooltip'] = 'Place down' },
+  }
+
+  local buttons = ""
+  for i=1,#button_table do
+    local b = button_table[i]
+    buttons = buttons .. "image_button[" .. start.x + b.offset.x .. "," .. start.y + b.offset.y .. ';1,1;' .. b.name .. ".png;" .. b.name .. ";]" ..
+               "tooltip[" .. b.name .. ";" .. b.tooltip .. "]"
+  end
+
+  return general_settings .. buttons
 end
 
 -- MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
