@@ -5,6 +5,12 @@ local F = minetest.formspec_escape
 
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 local FORMNAME_TURTLE_CONTROLPANEL = "adabots:turtle:controlpanel:"
+local FORMNAME_TURTLE_SLOTSELECT = "adabots:turtle:slotselect:"
+local turtle_forms = {
+  [FORMNAME_TURTLE_INVENTORY] = { ["formspec_function"] = function (turtle) return turtle:get_formspec_inventory() end },
+  [FORMNAME_TURTLE_CONTROLPANEL] = { ["formspec_function"] = function (turtle) return turtle:get_formspec_controlpanel() end },
+  [FORMNAME_TURTLE_SLOTSELECT] = { ["formspec_function"] = function (turtle) return turtle:get_formspec_slotselect() end },
+}
 
 local TURTLE_INVENTORYSIZE = 4 * 4
 
@@ -95,14 +101,15 @@ end
 
 minetest.register_on_player_receive_fields(
     function(player, formname, fields)
+        minetest.debug("Opened form " .. formname)
         local function isForm(name)
             return string.sub(formname, 1, string.len(name)) == name
         end
-        if isForm(FORMNAME_TURTLE_INVENTORY) then
-          turtleform = FORMNAME_TURTLE_INVENTORY
-        end
-        if isForm(FORMNAME_TURTLE_CONTROLPANEL) then
-          turtleform = FORMNAME_TURTLE_CONTROLPANEL
+        local turtleform = ""
+        for form_name, form in pairs(turtle_forms) do
+          if isForm(form_name) then
+            turtleform = form_name
+          end
         end
         local function get_turtle()
           local number_suffix = string.sub(formname, 1 + string.len(turtleform))
@@ -110,13 +117,13 @@ minetest.register_on_player_receive_fields(
           return getTurtle(id)
         end
         local turtle = get_turtle()
+        local player_name = player:get_player_name()
         local function refresh(turtleform)
-            minetest.show_formspec(player:get_player_name(),
-                                   turtleform .. turtle.id,
-                                   turtle:get_formspec_inventory())
+            minetest.debug("Refreshing " .. turtleform)
+            turtle:open_form(player_name, turtleform)
         end
         local function respond_to_common_controls()
-          if fields.close then minetest.close_formspec(player:get_player_name(), formname) end
+          if fields.close then minetest.close_formspec(player_name, formname) end
           if fields.arrow_forward then turtle:forward(true) end
           if fields.arrow_backward then turtle:back(true) end
           if fields.arrow_turnleft then turtle:turnLeft(true) end
@@ -129,6 +136,9 @@ minetest.register_on_player_receive_fields(
           if fields.place then turtle:place(true) end
           if fields.place_up then turtle:placeUp(true) end
           if fields.place_down then turtle:placeDown(true) end
+          if fields.open_inventory then turtle:open_inventory(player_name) end
+          if fields.open_controlpanel then turtle:open_controlpanel(player_name) end
+          if fields.open_slotselect then turtle:open_slotselect(player_name) end
           if fields.listen then
               if turtle.is_listening or
                   checkPortFree(turtle.host_ip, turtle.host_port) then
@@ -153,15 +163,18 @@ minetest.register_on_player_receive_fields(
                     refresh(turtleform)
                 end
             end)
-            if fields.open_controlpanel then
-              -- minetest.close_formspec(player:get_player_name(), formname)
-              minetest.show_formspec(player:get_player_name(),
-                FORMNAME_TURTLE_CONTROLPANEL .. turtle.id,
-                turtle:get_formspec_controlpanel())
-            end
             respond_to_common_controls()
             return true
         elseif isForm(FORMNAME_TURTLE_CONTROLPANEL) then
+            respond_to_common_controls()
+            return true
+        elseif isForm(FORMNAME_TURTLE_SLOTSELECT) then
+            for i = 1, TURTLE_INVENTORYSIZE do
+              if fields["select_" .. i] then 
+                turtle:select(i)
+                refresh(FORMNAME_TURTLE_SLOTSELECT)
+              end
+            end
             respond_to_common_controls()
             return true
         else
@@ -527,6 +540,16 @@ function TurtleEntity:get_formspec_inventory()
             player_inventory_items
 end
 
+local function render_buttons(start, button_table)
+  local buttons = ""
+  for i=1,#button_table do
+    local b = button_table[i]
+    buttons = buttons .. "image_button[" .. start.x + b.offset.x .. "," .. start.y + b.offset.y .. ';1,1;' .. b.name .. ".png;" .. b.name .. ";]" ..
+               "tooltip[" .. b.name .. ";" .. b.tooltip .. "]"
+  end
+  return buttons
+end
+
 function TurtleEntity:get_formspec_controlpanel()
   local listening = self.is_listening
   local sleeping_image = ""
@@ -541,18 +564,14 @@ function TurtleEntity:get_formspec_controlpanel()
 	  "no_prepend[]" ..
 	  "bgcolor[#00000000]" ..
 	  "background[0,0;25,12;controlpanel_bg.png]" ..
-    "options[key_event=true]" ..
 	  "style_type[button;noclip=true]"
-
 
   -- 
   -- X  ↑  ↟  ⇑  ⇈
   -- ↶     ↷  m  p
-  --    ↓  ↡  ⇓  ⇊
+  -- ↖  ↓  ↡  ⇓  ⇊
   
   local start = { ['x'] = 19.6, ['y'] = 7.6 }
-  -- local playpause_button = "image_button[" .. start.x + 1 .. "," .. start.y .. ";1,1;" .. playpause_image ..
-  --   ";listen;]tooltip[listen;Start/stop listening]"
   
   local button_table = {
     { ['name'] = 'close',           ['offset'] = { ['x'] = 0, ['y'] = 1 }, ['tooltip'] = 'Close' },
@@ -568,16 +587,57 @@ function TurtleEntity:get_formspec_controlpanel()
     { ['name'] = 'place_up',        ['offset'] = { ['x'] = 4, ['y'] = 1 }, ['tooltip'] = 'Place up' },
     { ['name'] = 'place',           ['offset'] = { ['x'] = 4, ['y'] = 2 }, ['tooltip'] = 'Place forward' },
     { ['name'] = 'place_down',      ['offset'] = { ['x'] = 4, ['y'] = 3 }, ['tooltip'] = 'Place down' },
+    { ['name'] = 'open_inventory',  ['offset'] = { ['x'] = 0, ['y'] = 3 }, ['tooltip'] = 'Open inventory' },
+    { ['name'] = 'open_slotselect', ['offset'] = { ['x'] = 1, ['y'] = 2 }, ['tooltip'] = 'Select slot' },
   }
 
-  local buttons = ""
-  for i=1,#button_table do
-    local b = button_table[i]
-    buttons = buttons .. "image_button[" .. start.x + b.offset.x .. "," .. start.y + b.offset.y .. ';1,1;' .. b.name .. ".png;" .. b.name .. ";]" ..
-               "tooltip[" .. b.name .. ";" .. b.tooltip .. "]"
-  end
+  local buttons = render_buttons(start, button_table)
 
   return general_settings .. buttons
+end
+
+function TurtleEntity:get_formspec_slotselect()
+  local general_settings =
+    "formspec_version[4]" ..
+    "size[25,12]" ..
+    "no_prepend[]" ..
+    "bgcolor[#00000000]" ..
+    "background[0,0;25,12;slotselect_bg.png]" ..
+    "style_type[button;noclip=true]"
+
+  -- X  1  2  3  4
+  -- ↘  5  6  7  8
+  --    9  10 11 12
+  --    13 14 15 16
+  
+  local start = { ['x'] = 19.6, ['y'] = 7.6 }
+  local button_table = {
+    { ['name'] = 'close',              ['offset'] = { ['x'] = 0, ['y'] = 0 }, ['tooltip'] = 'Close' },
+    { ['name'] = 'open_controlpanel',  ['offset'] = { ['x'] = 0, ['y'] = 1 }, ['tooltip'] = 'Open controlpanel' },
+  }
+  local buttons = render_buttons(start, button_table)
+
+  local selected_x = ((self.selected_slot - 1) % 4) + start.x + 0.98
+  local selected_y = math.floor((self.selected_slot - 1) / 4) + start.y + 0.02
+
+  local turtle_selection = "background[" .. selected_x .. "," .. selected_y -
+                              0.05 ..
+                              ";1.1,1.1;mcl_inventory_hotbar_selected.png]"
+
+  slot_tiles = ""
+  for i = 1, TURTLE_INVENTORYSIZE do
+    local x = ((i - 1) % 4) + start.x + 1.1
+    local y = math.floor((i - 1) / 4) + start.y + 0.1
+    local stack = self.inv:get_stack("main", i)
+    local stack_tooltip = stack:get_short_description()
+    local stack_name = stack:get_name()
+    local images = "empty.png"
+    local button = "item_image_button[" .. x .. "," .. y .. ";0.9,0.9;" .. stack_name .. ";select_" .. i .. ";]"
+    local tooltip = "tooltip[select_" .. i .. ";Select slot " .. i .. " (" .. stack_tooltip .. ")]"
+    slot_tiles = slot_tiles .. button .. tooltip
+  end
+
+  return general_settings .. buttons .. slot_tiles .. turtle_selection
 end
 
 -- MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
@@ -648,16 +708,16 @@ end
 
 function TurtleEntity:on_rightclick(clicker)
     if not clicker or not clicker:is_player() then return end
-    minetest.show_formspec(clicker:get_player_name(),
-                           FORMNAME_TURTLE_INVENTORY .. self.id,
-                           self:get_formspec_inventory())
+    self:open_inventory(clicker:get_player_name())
 end
 
 function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities,
                                direction, damage)
-    if time_from_last_punch < 0.5 then
-        minetest.debug("double clicked " .. self.name)
-    end
+    if not puncher or not puncher:is_player() then return end
+    self:open_controlpanel(puncher:get_player_name())
+    -- if time_from_last_punch < 0.5 then
+    --     minetest.debug("double clicked " .. self.name)
+    -- end
 end
 
 local function generate_line(s, ypos)
@@ -877,6 +937,25 @@ function TurtleEntity:update_listening_appearance()
     else
         self:setSleepingTexture()
     end
+end
+
+function TurtleEntity:open_form(player_name, form_name)
+  local form = turtle_forms[form_name]
+  local formspec = form.formspec_function(self)
+  minetest.debug("Opening form " .. form_name .. self.id)
+  minetest.show_formspec(player_name, form_name .. self.id, formspec)
+end
+
+function TurtleEntity:open_inventory(player_name)
+  self:open_form(player_name, FORMNAME_TURTLE_INVENTORY)
+end
+
+function TurtleEntity:open_controlpanel(player_name)
+  self:open_form(player_name, FORMNAME_TURTLE_CONTROLPANEL)
+end
+
+function TurtleEntity:open_slotselect(player_name)
+  self:open_form(player_name, FORMNAME_TURTLE_SLOTSELECT)
 end
 
 local function is_command_approved(turtle_command)
