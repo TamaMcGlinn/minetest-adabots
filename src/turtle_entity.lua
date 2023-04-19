@@ -283,7 +283,7 @@ end
 
 function TurtleEntity:inspectnode(nodeLocation)
     local result = minetest.get_node(nodeLocation)
-    return "minecraft:" .. result.name
+    return result.name
 end
 
 -- Get items loose in the world, up to maxAmount (pass 0 for infinite)
@@ -373,7 +373,7 @@ function TurtleEntity:sucknode(nodeLocation, maxAmount)
 end
 
 function TurtleEntity:detectnode(nodeLocation)
-    return self:inspectnode(nodeLocation) ~= "minecraft:air"
+    return self:inspectnode(nodeLocation) ~= "air"
 end
 
 function TurtleEntity:itemDrop(nodeLocation, amount)
