@@ -299,9 +299,18 @@ end
 -- Add the stack to the first available slot starting at the selected slot
 -- return a stack of the items that could not fit
 function TurtleEntity:add_item(stack)
+  local slots = {}
+  for i = 0, TURTLE_INVENTORYSIZE - 1 do
+    local slot = ((self.selected_slot + i - 1) % TURTLE_INVENTORYSIZE) + 1
+    slots[#slots+1] = slot
+  end
+  add_item_to_slots(stack, slots)
+end
+
+function TurtleEntity:add_item_to_slots(stack, slots)
     local leftover_stack = stack
-    for i = 0, TURTLE_INVENTORYSIZE - 1 do
-        local slot = ((self.selected_slot + i - 1) % TURTLE_INVENTORYSIZE) + 1
+    for i = 1,#slots,1 do
+        local slot = slots[i]
         local current_stack = self.inv:get_stack("main", slot)
         if current_stack == nil then
             minetest.debug("Error: turtle slot " .. slot .. " has nil stack")
@@ -966,7 +975,7 @@ local function is_command_approved(turtle_command)
     for _, dc in pairs(direct_commands) do
         if turtle_command == "turtle." .. dc .. "()" then return true end
     end
-    local single_number_commands = {"select", "getItemCount"}
+    local single_number_commands = {"select", "getItemCount", "craft"}
     for _, snc in pairs(single_number_commands) do
         if turtle_command:find("^turtle%." .. snc .. "%( *%d+%)$") ~= nil then
             return true
@@ -1069,33 +1078,44 @@ function TurtleEntity:itemSplitTurtleslot(turtleslotSrc, turtleslotDst, amount)
 end
 
 ---    TODO craft using top right 3x3 grid, and put result in itemslotResult
-function TurtleEntity:itemCraft(turtleslotResult)
-    if not isValidInventoryIndex(turtleslotResult) then return false end
-    local craftSquares = {2, 3, 4, 6, 7, 8, 10, 11, 12}
-    local output, decremented_input = minetest.get_craft_result({
-        method = "normal",
-        width = 3,
-        items = {
-            self:getTurtleslot(craftSquares[1]),
-            self:getTurtleslot(craftSquares[2]),
-            self:getTurtleslot(craftSquares[3]),
-            self:getTurtleslot(craftSquares[4]),
-            self:getTurtleslot(craftSquares[5]),
-            self:getTurtleslot(craftSquares[6]),
-            self:getTurtleslot(craftSquares[7]),
-            self:getTurtleslot(craftSquares[8]),
-            self:getTurtleslot(craftSquares[9])
-        }
-    })
-    if output.item:is_empty() then return false end
-    -- Put rest of ingredients back
-    for i, turtleslot in pairs(craftSquares) do
-        self:setTurtleslot(turtleslot, decremented_input.items[i])
-    end
-    -- Put output in output slot
-    local leftover_craft = self:getTurtleslot(turtleslotResult):add_item(
-                               output.item)
-    -- TODO Deal with leftover craft and output.replacements
+function TurtleEntity:craft(times)
+    for i = 1,times,1 do
+      local craftSquares = {1, 2, 3, 5, 6, 7, 9, 10, 11}
+      local outputSlots = {4, 8, 12, 13, 14, 15, 16}
+      local output, decremented_input = minetest.get_craft_result({
+          method = "normal",
+          width = 3,
+          items = {
+              self:getTurtleslot(craftSquares[1]),
+              self:getTurtleslot(craftSquares[2]),
+              self:getTurtleslot(craftSquares[3]),
+              self:getTurtleslot(craftSquares[4]),
+              self:getTurtleslot(craftSquares[5]),
+              self:getTurtleslot(craftSquares[6]),
+              self:getTurtleslot(craftSquares[7]),
+              self:getTurtleslot(craftSquares[8]),
+              self:getTurtleslot(craftSquares[9])
+          }
+      })
+      if output.item:is_empty() then return false end
+      -- Put rest of ingredients back
+      for i, turtleslot in pairs(craftSquares) do
+          self:setTurtleslot(turtleslot, decremented_input.items[i])
+      end
+      -- Put output in output slot
+      local leftover_stack = self:add_item_to_slots(output.item, outputSlots)
+      if leftover_stack:get_count() > 0 then 
+        -- drop items into world
+        item_name = leftover_stack:to_table().name
+        amount = leftover_stack:get_count()
+        local pos = self:getLoc()
+        local below = vector.new(pos.x, pos.y - 1, pos.z)
+        local drop_pos = minetest.find_node_near(below, 1, {"air"}) or below
+        for item_count = 1, amount do
+            minetest.add_item(drop_pos, item_name)
+        end
+      end
+  end
     return true
 end
 --- @returns True if fuel was consumed. False if itemslot did not have fuel.
