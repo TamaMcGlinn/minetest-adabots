@@ -274,6 +274,8 @@ function TurtleEntity:build(nodeLocation)
         under = nodeLocation,
         above = self:getLoc()
     })
+    -- Consume item
+    newstack:set_count(newstack:get_count() - 1)
     self.inv:set_stack("main", self.selected_slot, newstack)
 
     if position_placed == nil then return false end
