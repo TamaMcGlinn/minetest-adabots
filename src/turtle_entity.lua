@@ -722,6 +722,12 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     adabots.turtles[self.id] = self
 end
 
+function TurtleEntity:on_deactivate()
+  if self.pickaxe then
+    self.pickaxe:remove()
+  end
+end
+
 function TurtleEntity:on_step(dtime)
     self:sucknode(self:getLoc(), 0)
     if not self.wait_since_last_step then self.wait_since_last_step = 0 end
