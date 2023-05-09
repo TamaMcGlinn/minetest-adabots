@@ -254,13 +254,20 @@ function TurtleEntity:mine(nodeLocation)
     minetest.remove_node(nodeLocation)
     for _, iteminfo in pairs(drops) do
         local stack = ItemStack(iteminfo)
-        if self.inv:room_for_item("main", stack) then
-            self.inv:add_item("main", stack)
-        else
-            minetest.add_item(nodeLocation, stack.name)
+        if not self:pickup(stack) then
+          minetest.add_item(nodeLocation, stack.name)
         end
     end
     return true
+end
+
+function TurtleEntity:pickup(stack)
+  if self.inv:room_for_item("main", stack) then
+    self.inv:add_item("main", stack)
+    return true
+  else
+    return false
+  end
 end
 
 function TurtleEntity:build(nodeLocation)
@@ -294,8 +301,27 @@ end
 -- Returns true if any items were retrieved
 -- Returns false only if unable to get any items
 function TurtleEntity:gather_items(nodeLocation, maxAmount)
-    -- TODO implement
-    return false
+    local picked_up_items = 0
+    local objectlist = minetest.get_objects_inside_radius(nodeLocation, 1)
+    for i = 1,#objectlist do
+      local object = objectlist[i]
+      local properties = object:get_properties()
+      local ent = object:get_luaentity()
+      if ent then
+        local itemstring = ent.itemstring
+        if itemstring and itemstring ~= "" then
+          local item = ItemStack(itemstring)
+          if self:pickup(item) then
+            picked_up_items = picked_up_items + 1
+            object:remove() -- remove object floating in the world
+            if maxAmount > 0 and picked_up_items >= maxAmount then
+              return true
+            end
+          end
+        end
+      end
+    end
+    return picked_up_items > 0
 end
 
 -- Add the stack to the first available slot starting at the selected slot
