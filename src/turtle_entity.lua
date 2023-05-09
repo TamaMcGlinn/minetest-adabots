@@ -732,6 +732,7 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
 end
 
 function TurtleEntity:on_step(dtime)
+    self:sucknode(self:getLoc(), 0)
     if not self.wait_since_last_step then self.wait_since_last_step = 0 end
     if self.is_listening then
         self.wait_since_last_step = self.wait_since_last_step + dtime
