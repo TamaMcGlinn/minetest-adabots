@@ -248,16 +248,7 @@ function TurtleEntity:mine(nodeLocation)
     if nodeLocation == nil then return false end
     local node = minetest.get_node(nodeLocation)
     if node.name == "air" then return false end
-    local drops = minetest.get_node_drops(node)
-    -- TODO NOTE This violates spawn protection, but I know of no way to mine that abides by spawn protection AND picks up all items and contents (dig_node drops items and I don't know how to pick them up)
-    minetest.remove_node(nodeLocation)
-    for _, iteminfo in pairs(drops) do
-        local stack = ItemStack(iteminfo)
-        if not self:pickup(stack) then
-          minetest.add_item(nodeLocation, stack.name)
-        end
-    end
-    return true
+    return minetest.dig_node(nodeLocation)
 end
 
 function TurtleEntity:pickup(stack)
