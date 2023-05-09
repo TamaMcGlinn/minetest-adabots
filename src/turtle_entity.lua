@@ -101,7 +101,6 @@ end
 
 minetest.register_on_player_receive_fields(
     function(player, formname, fields)
-        minetest.debug("Opened form " .. formname)
         local function isForm(name)
             return string.sub(formname, 1, string.len(name)) == name
         end
@@ -979,7 +978,6 @@ end
 function TurtleEntity:open_form(player_name, form_name)
   local form = turtle_forms[form_name]
   local formspec = form.formspec_function(self)
-  minetest.debug("Opening form " .. form_name .. self.id)
   minetest.show_formspec(player_name, form_name .. self.id, formspec)
 end
 
