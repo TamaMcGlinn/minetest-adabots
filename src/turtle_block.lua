@@ -21,11 +21,17 @@ minetest.register_node("adabots:turtle", {
         minetest.remove_node(pos)
     end
 })
+
+local iron = 'mcl_core:iron_ingot'
+local chest = 'mcl_chests:chest'
+local redstone_block = 'mesecons_torch:redstoneblock'
+local gold = 'mcl_core:gold_ingot'
+
 minetest.register_craft({
     output = 'adabots:turtle',
     recipe = {
-        {'default:steel_ingot', 'default:steel_ingot', 'default:steel_ingot'},
-        {'default:steel_ingot', 'default:chest', 'default:steel_ingot'},
-        {'default:steel_ingot', 'default:mese', 'default:steel_ingot'}
+        {gold, chest,          gold},
+        {iron, redstone_block, iron},
+        {gold, iron,           gold}
     }
 })
