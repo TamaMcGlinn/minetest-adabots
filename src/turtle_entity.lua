@@ -118,7 +118,6 @@ minetest.register_on_player_receive_fields(
         local turtle = get_turtle()
         local player_name = player:get_player_name()
         local function refresh(turtleform)
-            minetest.debug("Refreshing " .. turtleform)
             turtle:open_form(player_name, turtleform)
         end
         local function respond_to_common_controls()
