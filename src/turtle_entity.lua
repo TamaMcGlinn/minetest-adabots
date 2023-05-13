@@ -482,7 +482,7 @@ function TurtleEntity:get_formspec_inventory()
         sleeping_image = "image[0.9,0.12;0.6,0.6;zzz.png]"
         playpause_image = "play_btn.png"
     end
-    local general_settings = "size[9,9.75]" .. "options[key_event=true]" ..
+    local general_settings = "size[9,9.25]" .. "options[key_event=true]" ..
                                  "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]"
     local turtle_image = "set_focus[listen;true]" ..
                              "image[0,0;2,2;turtle_icon.png]" .. sleeping_image
