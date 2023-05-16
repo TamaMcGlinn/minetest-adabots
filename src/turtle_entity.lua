@@ -399,7 +399,7 @@ function TurtleEntity:sucknode(nodeLocation, maxAmount)
 end
 
 function TurtleEntity:detectnode(nodeLocation)
-    return self:inspectnode(nodeLocation) ~= "air"
+    return not node_walkable(nodeLocation)
 end
 
 function TurtleEntity:itemDrop(nodeLocation, amount)
