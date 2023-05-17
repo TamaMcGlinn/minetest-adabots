@@ -22,3 +22,7 @@ local modpath = minetest.get_modpath("adabots")
 dofile(modpath .. "/src/turtle_block.lua")
 dofile(modpath .. "/src/turtle_entity.lua")
 
+-- for debugging, use e.g. minetest.debug("D: " .. json.encode(sometable))
+-- json = dofile(modpath .. "/json.lua/json.lua")
+-- json.lua/ is gitignored, you need to:
+-- git clone git@github.com:rxi/json.lua
