@@ -11,6 +11,13 @@ local turtle_forms = {
   [FORMNAME_TURTLE_CONTROLPANEL] = { ["formspec_function"] = function (turtle) return turtle:get_formspec_controlpanel() end },
   [FORMNAME_TURTLE_SLOTSELECT] = { ["formspec_function"] = function (turtle) return turtle:get_formspec_slotselect() end },
 }
+local supported_tools = {
+  "mcl_tools:pick_wood",
+  "mcl_tools:pick_stone",
+  "mcl_tools:pick_iron",
+  "mcl_tools:pick_gold",
+  "mcl_tools:pick_diamond"
+}
 
 local TURTLE_INVENTORYSIZE = 4 * 4
 
@@ -211,6 +218,21 @@ function TurtleEntity:setTurtleslot(turtleslot, stack)
     return true
 end
 
+function TurtleEntity:getToolInfo()
+  local tool_stack = self.toolinv:get_stack("toolmain", 1)
+  if tool_stack == nil then
+    return nil
+  end
+  local table = tool_stack:to_table()
+  if table == nil then
+    return nil
+  end
+  local tool_name = table.name
+  local tool_info = minetest.registered_items[tool_name]
+  return tool_info
+  -- return {"name": tool_name, "level": tool_info["tool_capabilities"]["max_drop_level"]}
+end
+
 function dump(o)
     if type(o) == 'table' then
         local s = '{ '
@@ -231,7 +253,7 @@ function node_walkable(nodeLocation)
     end
     local node = minetest.get_node(nodeLocation)
     local node_name = node.name
-    node_registration = minetest.registered_nodes[node_name]
+    local node_registration = minetest.registered_nodes[node_name]
     return node_registration.walkable
 end
 
@@ -243,10 +265,59 @@ function TurtleEntity:move(nodeLocation)
     return true
 end
 
+function contains(list, x)
+  for _, v in pairs(list) do
+    if v == x then return true end
+  end
+  return false
+end
+
+function is_supported_tool(tool_info)
+  local tool_name = tool_info["name"]
+  return is_supported_toolname(tool_name)
+end
+
+function is_supported_toolname(tool_name)
+  if not contains(supported_tools, tool_name) then
+    minetest.debug("Error: " .. tool_name .. " is not a supported Adabots turtle tool")
+    return false
+  end
+  return true
+end
+
+function get_tool_hardness(tool_info)
+  if not is_supported_tool(tool_info) then
+    return 0
+  end
+  local capabilities = tool_info["tool_capabilities"]
+  if capabilities == nil then
+    return 0
+  end
+  return capabilities["max_drop_level"]
+end
+
+function TurtleEntity:pickaxe_can_dig(node)
+  local node_name = node.name
+  local node_registration = minetest.registered_nodes[node_name]
+  local node_level = node_registration["level"]
+  local tool_info = self:getToolInfo()
+  if tool_info == nil then
+    return false
+  end
+  local tool_hardness = get_tool_hardness(tool_info)
+  local node_hardness = node_registration["_mcl_hardness"]
+  -- minetest.debug("Tool: " .. tool_hardness .. " vs node: " .. node_hardness)
+  return tool_hardness >= node_hardness
+end
+
 function TurtleEntity:mine(nodeLocation)
     if nodeLocation == nil then return false end
     local node = minetest.get_node(nodeLocation)
     if node.name == "air" then return false end
+    -- check pickaxe strong enough
+    if not self:pickaxe_can_dig(node) then
+      return false
+    end
     return minetest.dig_node(nodeLocation)
 end
 
@@ -491,37 +562,28 @@ function TurtleEntity:get_formspec_inventory()
                             F(minetest.colorize("#313131", "AdaBot name")) ..
                             ";" .. F(self.name) .. "]"
 
-    local playpause_button = "image_button[4,2.4;1,1;" .. playpause_image ..
+    local playpause_button = "image_button[4,2.2;1,1;" .. playpause_image ..
                                  ";listen;]tooltip[listen;Start/stop listening]"
 
-    local movement_buttons =
-        "image_button[0,3.4;1,1;arrow_forward.png;arrow_forward;]" ..
-            "tooltip[arrow_forward;Move forward]" ..
-            "image_button[1,3.4;1,1;arrow_backward.png;arrow_backward;]" ..
-            "tooltip[arrow_backward;Move backward]" ..
-            "image_button[2,3.4;1,1;arrow_turnleft.png;arrow_turnleft;]" ..
-            "tooltip[arrow_turnleft;Turn left]" ..
-            "image_button[3,3.4;1,1;arrow_turnright.png;arrow_turnright;]" ..
-            "tooltip[arrow_turnright;Turn right]"
+    local tool_label = "label[0,3.0;" .. F(minetest.colorize("#313131", "Tool")) .. "]"
+    local tool_bg = mcl_formspec.get_itemslot_bg(0, 3.4, 1, 1)
+    local tool_inventory_slot = "list[" .. self.toolinv_fullname .. ";toolmain;0,3.4;1,1;]"
+    local tool = tool_label .. tool_bg .. tool_inventory_slot
     local controlpanel_button =
         "image_button[4,3.4;1,1;open_controlpanel.png;open_controlpanel;]" ..
         "tooltip[open_controlpanel;Open controlpanel]"
 
-
-
-
-
     local connection_settings = "style_type[field;font_size=16]" ..
-                                    "label[0.4,2.0;" ..
+                                    "label[0.4,1.8;" ..
                                     F(
                                         minetest.colorize("#313131",
                                                           "Connection settings")) ..
-                                    "]" .. "field[0.3,2.9;3.0,0.5;host_ip;;" ..
+                                    "]" .. "field[0.3,2.7;3.0,0.5;host_ip;;" ..
                                     F(
                                         minetest.colorize("#313131",
                                                           self.host_ip or
                                                               "localhost")) ..
-                                    "]" .. "field[3.2,2.9;1.1,0.5;host_port;;" ..
+                                    "]" .. "field[3.2,2.7;1.1,0.5;host_port;;" ..
                                     F(
                                         minetest.colorize("#313131",
                                                           self.host_port or
@@ -561,7 +623,7 @@ function TurtleEntity:get_formspec_inventory()
 
     return
         general_settings .. turtle_image .. turtle_name .. playpause_button ..
-            movement_buttons .. controlpanel_button .. connection_settings .. turtle_inventory ..
+            tool .. controlpanel_button .. connection_settings .. turtle_inventory ..
             turtle_selection .. turtle_inventory_items .. player_inventory ..
             player_inventory_items
 end
@@ -666,6 +728,32 @@ function TurtleEntity:get_formspec_slotselect()
   return general_settings .. buttons .. slot_tiles .. turtle_selection
 end
 
+-- Called when a player wants to put something into the inventory.
+-- Return value: number of items allowed to put.
+-- Return value -1: Allow and don't modify item count in inventory.
+function toolinv_allow_put(inv, listname, index, stack, player)
+  if is_supported_toolname(stack:get_name()) then
+    return 1
+  else
+    return 0
+  end
+end
+
+function TurtleEntity:toolinv_on_put(inv, listname, index, stack, player)
+  self:refresh_pickaxe()
+end
+
+function TurtleEntity:toolinv_on_take(inv, listname, index, stack, player)
+  self:refresh_pickaxe()
+end
+
+-- https://rosettacode.org/wiki/Partial_function_application#Lua
+function partial(f, arg)
+    return function(...)
+        return f(arg, ...)
+    end
+end
+
 -- MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
 function TurtleEntity:on_activate(staticdata, dtime_s)
     local data = minetest.deserialize(staticdata)
@@ -686,21 +774,26 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     self.autoRefuel = data.autoRefuel or true
     self.codeUncompiled = data.codeUncompiled or ""
 
-    if not self.pickaxe then
-        self.pickaxe = minetest.add_entity({x = 0, y = 0, z = 0},
-                                           "adabots:diamond_pickaxe")
-        local relative_position = {x = 0, y = 0, z = 0}
-        local relative_rotation = {x = 0, y = 0, z = 0}
-        self.pickaxe:set_attach(self.object, "", relative_position,
-                                relative_rotation)
-    end
-
     -- Create inventory
     self.inv_name = "adabots:turtle:" .. self.id
     self.inv_fullname = "detached:" .. self.inv_name
     self.inv = minetest.create_detached_inventory(self.inv_name, {})
     if self.inv == nil or self.inv == false then
         error("Could not spawn inventory")
+    end
+
+    -- Create inventory for tool
+    self.toolinv_name = "adabots:turtle_tool:" .. self.id
+    self.toolinv_fullname = "detached:" .. self.toolinv_name
+    self.toolinv = minetest.create_detached_inventory(self.toolinv_name,
+    {
+        allow_put = toolinv_allow_put,
+        -- on_move = function(inv, from_list, from_index, to_list, to_index, count, player),
+        on_put = partial(TurtleEntity.toolinv_on_put, self),
+        on_take = partial(TurtleEntity.toolinv_on_take, self),
+    })
+    if self.toolinv == nil or self.toolinv == false then
+        error("Could not spawn tool inventory")
     end
 
     -- Restart listening
@@ -716,15 +809,51 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     -- Keep items from save
     if data.inv ~= nil then deserializeInventory(self.inv, data.inv) end
     self.inv:set_size("main", TURTLE_INVENTORYSIZE)
+    if data.toolinv ~= nil then deserializeInventory(self.toolinv, data.toolinv) end
+    self.toolinv:set_size("toolmain", 1)
 
     -- Add to turtle list
     adabots.turtles[self.id] = self
+
+    self:add_pickaxe_model()
+end
+
+function TurtleEntity:refresh_pickaxe()
+  self:remove_pickaxe()
+  self:add_pickaxe_model()
+end
+
+function get_pickaxe_entity_name(tool_name)
+  -- mcl_tools:pick_wood => adabots:pick_wood
+  return "adabots" .. string.sub(tool_name, 10, -1)
+end
+
+function TurtleEntity:add_pickaxe_model()
+  local tool_info = self:getToolInfo()
+  if tool_info == nil then
+    return
+  end
+  if not is_supported_tool(tool_info) then
+    return
+  end
+  local tool_name = tool_info["name"]
+  -- minetest.debug("Tool name: " .. tool_name)
+  local pickaxe_entity = get_pickaxe_entity_name(tool_name)
+  self.pickaxe = minetest.add_entity({x = 0, y = 0, z = 0}, pickaxe_entity)
+  local relative_position = {x = 0, y = 0, z = 0}
+  local relative_rotation = {x = 0, y = 0, z = 0}
+  self.pickaxe:set_attach(self.object, "", relative_position,
+                          relative_rotation)
+end
+
+function TurtleEntity:remove_pickaxe()
+  if self.pickaxe ~= nil then
+    self.pickaxe:remove()
+  end
 end
 
 function TurtleEntity:on_deactivate()
-  if self.pickaxe then
-    self.pickaxe:remove()
-  end
+  self:remove_pickaxe()
 end
 
 function TurtleEntity:on_step(dtime)
@@ -838,6 +967,7 @@ function TurtleEntity:get_staticdata()
         selected_slot = self.selected_slot,
         autoRefuel = self.autoRefuel,
         inv = serializeInventory(self.inv),
+        toolinv = serializeInventory(self.toolinv),
         codeUncompiled = self.codeUncompiled,
         complete = true
     })
@@ -1206,6 +1336,27 @@ function TurtleEntity:dump(object) return dump(object) end
 
 minetest.register_entity("adabots:turtle", TurtleEntity)
 
+-- https://stackoverflow.com/a/16077650/2144408
+local function deepcopy(o, seen)
+  seen = seen or {}
+  if o == nil then return nil end
+  if seen[o] then return seen[o] end
+
+  local no
+  if type(o) == 'table' then
+    no = {}
+    seen[o] = no
+
+    for k, v in next, o, nil do
+      no[deepcopy(k, seen)] = deepcopy(v, seen)
+    end
+    setmetatable(no, deepcopy(getmetatable(o), seen))
+  else -- number, string, boolean, etc
+    no = o
+  end
+  return no
+end
+
 local PickaxeEntity = {
     initial_properties = {
         is_visible = true,
@@ -1214,7 +1365,7 @@ local PickaxeEntity = {
 
         visual = "mesh",
         mesh = "pickaxe.b3d",
-        textures = {"pickaxe_diffuse.png"},
+        textures = {"pick_diamond.png"},
         visual_size = {x = 1, y = 1, z = 1},
 
         static_save = false,
@@ -1226,5 +1377,15 @@ local PickaxeEntity = {
     }
 }
 
-minetest.register_entity("adabots:diamond_pickaxe", PickaxeEntity)
+function set_pickaxe_properties(texture)
+  local entity = deepcopy(PickaxeEntity)
+  entity["initial_properties"]["textures"] = {texture}
+  return entity
+end
+
+minetest.register_entity("adabots:pick_wood", set_pickaxe_properties("pick_wood.png"))
+minetest.register_entity("adabots:pick_stone", set_pickaxe_properties("pick_stone.png"))
+minetest.register_entity("adabots:pick_iron", set_pickaxe_properties("pick_iron.png"))
+minetest.register_entity("adabots:pick_gold", set_pickaxe_properties("pick_gold.png"))
+minetest.register_entity("adabots:pick_diamond", set_pickaxe_properties("pick_diamond.png"))
 
