@@ -296,16 +296,23 @@ function get_tool_hardness(tool_info)
   return capabilities["max_drop_level"]
 end
 
-function TurtleEntity:pickaxe_can_dig(node)
+function get_node_hardness(node)
   local node_name = node.name
   local node_registration = minetest.registered_nodes[node_name]
-  local node_level = node_registration["level"]
+  local hardness = node_registration["_mcl_hardness"]
+  if hardness == nil then
+    return 0
+  end
+  return hardness
+end
+
+function TurtleEntity:pickaxe_can_dig(node)
   local tool_info = self:getToolInfo()
   if tool_info == nil then
     return false
   end
   local tool_hardness = get_tool_hardness(tool_info)
-  local node_hardness = node_registration["_mcl_hardness"]
+  local node_hardness = get_node_hardness(node)
   -- minetest.debug("Tool: " .. tool_hardness .. " vs node: " .. node_hardness)
   return tool_hardness >= node_hardness
 end
