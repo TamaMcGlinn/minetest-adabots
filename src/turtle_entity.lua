@@ -19,6 +19,7 @@ local supported_tools = {
   "mcl_tools:pick_diamond"
 }
 
+local craftSquares = {1, 2, 3, 5, 6, 7, 9, 10, 11}
 local TURTLE_INVENTORYSIZE = 4 * 4
 
 -- lifted from mcl_signs
@@ -144,6 +145,7 @@ minetest.register_on_player_receive_fields(
           if fields.open_inventory then turtle:open_inventory(player_name) end
           if fields.open_controlpanel then turtle:open_controlpanel(player_name) end
           if fields.open_slotselect then turtle:open_slotselect(player_name) end
+          if fields.craft then turtle:craft(1) end
           if fields.listen then
               if turtle.is_listening or
                   checkPortFree(turtle.host_ip, turtle.host_port) then
@@ -655,19 +657,20 @@ function TurtleEntity:get_formspec_controlpanel()
 
   local general_settings =
 	  "formspec_version[4]" ..
-	  "size[25,12]" ..
+	  "size[26,12]" ..
 	  "no_prepend[]" ..
 	  "bgcolor[#00000000]" ..
 	  "background[0,0;25,12;controlpanel_bg.png]" ..
 	  "style_type[button;noclip=true]"
 
   -- 
-  -- X  ↑  ↟  ⇑  ⇈
+  -- X  ↑  ↟  ⇑  ⇈  c
   -- ↶     ↷  m  p
   -- ↖  ↓  ↡  ⇓  ⇊
   
-  local start = { ['x'] = 19.6, ['y'] = 7.6 }
+  local start = { ['x'] = 18.65, ['y'] = 7.6 }
   
+  local craft_tooltip = 'Craft ' .. self:peek_craft_result()
   local button_table = {
     { ['name'] = 'close',           ['offset'] = { ['x'] = 0, ['y'] = 1 }, ['tooltip'] = 'Close' },
     { ['name'] = 'arrow_forward',   ['offset'] = { ['x'] = 1, ['y'] = 1 }, ['tooltip'] = 'Move forward' },
@@ -684,6 +687,7 @@ function TurtleEntity:get_formspec_controlpanel()
     { ['name'] = 'place_down',      ['offset'] = { ['x'] = 4, ['y'] = 3 }, ['tooltip'] = 'Place down' },
     { ['name'] = 'open_inventory',  ['offset'] = { ['x'] = 0, ['y'] = 3 }, ['tooltip'] = 'Open inventory' },
     { ['name'] = 'open_slotselect', ['offset'] = { ['x'] = 1, ['y'] = 2 }, ['tooltip'] = 'Select slot' },
+    { ['name'] = 'craft',           ['offset'] = { ['x'] = 5, ['y'] = 1 }, ['tooltip'] = craft_tooltip },
   }
 
   local buttons = render_buttons(start, button_table)
@@ -1237,10 +1241,33 @@ function TurtleEntity:itemSplitTurtleslot(turtleslotSrc, turtleslotDst, amount)
     return true
 end
 
----    TODO craft using top right 3x3 grid, and put result in itemslotResult
+function TurtleEntity:peek_craft_result()
+  local output, decremented_input = minetest.get_craft_result({
+      method = "normal",
+      width = 3,
+      items = {
+          self:getTurtleslot(craftSquares[1]),
+          self:getTurtleslot(craftSquares[2]),
+          self:getTurtleslot(craftSquares[3]),
+          self:getTurtleslot(craftSquares[4]),
+          self:getTurtleslot(craftSquares[5]),
+          self:getTurtleslot(craftSquares[6]),
+          self:getTurtleslot(craftSquares[7]),
+          self:getTurtleslot(craftSquares[8]),
+          self:getTurtleslot(craftSquares[9])
+      }
+  })
+  return output.item:get_short_description()
+end
+
+-- craft using top left 3x3 grid
+-- defaults to single item
+-- puts output into selected square, or otherwise
+-- any non-craft-grid square that is free, or otherwise
+-- drops it into the world
 function TurtleEntity:craft(times)
-    for i = 1,times,1 do
-      local craftSquares = {1, 2, 3, 5, 6, 7, 9, 10, 11}
+    craft_amount = times or 1
+    for i = 1,craft_amount,1 do
       local outputSlots = {4, 8, 12, 13, 14, 15, 16}
       local output, decremented_input = minetest.get_craft_result({
           method = "normal",
