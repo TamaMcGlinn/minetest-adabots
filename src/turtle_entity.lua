@@ -305,7 +305,7 @@ function get_node_hardness(node)
   if hardness == nil then
     return 0
   end
-  return hardness
+  return math.floor(hardness)
 end
 
 function TurtleEntity:pickaxe_can_dig(node)
