@@ -319,6 +319,35 @@ function TurtleEntity:pickaxe_can_dig(node)
   return tool_hardness >= node_hardness
 end
 
+-- returns the wear for one use,
+-- such that the given number of uses will break the tool
+function get_wear_for_uses(uses)
+  return 65535 / (uses-1)
+end
+
+function TurtleEntity:increment_tool_uses()
+  local tool_stack = self.toolinv:get_stack("toolmain", 1)
+  local table = tool_stack:to_table()
+  local tool_wear_rates = {
+    ["mcl_tools:pick_wood"] = get_wear_for_uses(60),
+    ["mcl_tools:pick_stone"] = get_wear_for_uses(132),
+    ["mcl_tools:pick_iron"] = get_wear_for_uses(251),
+    ["mcl_tools:pick_gold"] = get_wear_for_uses(33),
+    ["mcl_tools:pick_diamond"] = get_wear_for_uses(1562)
+  }
+  local wear_increment = tool_wear_rates[table.name]
+  -- minetest.debug("Wear: " .. table.wear)
+  if table.wear > 65535 - wear_increment then
+    -- tool is spent
+    self.toolinv:set_stack("toolmain", 1, nil)
+    self:remove_pickaxe()
+  else
+    table.wear = table.wear + wear_increment -- must be <= 65535, the max value
+    local new_tool_stack = ItemStack(table)
+    self.toolinv:set_stack("toolmain", 1, new_tool_stack)
+  end
+end
+
 function TurtleEntity:mine(nodeLocation)
     if nodeLocation == nil then return false end
     local node = minetest.get_node(nodeLocation)
@@ -327,7 +356,10 @@ function TurtleEntity:mine(nodeLocation)
     if not self:pickaxe_can_dig(node) then
       return false
     end
-    return minetest.dig_node(nodeLocation)
+    if minetest.dig_node(nodeLocation) then
+      self:increment_tool_uses()
+      return true
+    end
 end
 
 function TurtleEntity:pickup(stack)
