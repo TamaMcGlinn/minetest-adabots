@@ -259,9 +259,49 @@ function node_walkable(nodeLocation)
     return node_registration.walkable
 end
 
+function player_can_stand_at(pos)
+  local above = vector.new(pos.x, pos.y + 1, pos.z)
+  return not node_walkable(pos) and not node_walkable(above)
+end
+
+function Union(t1,t2)
+    local handled_items = {}
+    local output = {}
+    for i=1,#t1 do
+      local item = t1[i]
+      if handled_items[item] == nil then
+        handled_items[item] = true
+        output[#output+1] = item
+      end
+    end
+    for i=1,#t2 do
+      local item = t2[i]
+      if handled_items[item] == nil then
+        handled_items[item] = true
+        output[#output+1] = item
+      end
+    end
+    return output
+end
+
 function TurtleEntity:move(nodeLocation)
     -- Verify new pos is empty
     if node_walkable(nodeLocation) then return false end
+    -- Push player if present
+    local below = vector.new(nodeLocation.x, nodeLocation.y - 1.0, nodeLocation.z)
+    local objectsthere = minetest.get_objects_inside_radius(nodeLocation, 0.85)
+    local objectsbelow = minetest.get_objects_inside_radius(below, 0.85)
+    local objectlist = Union(objectsthere, objectsbelow)
+    for i = 1,#objectlist do
+      local object = objectlist[i]
+      if minetest.is_player(object) then
+        local movement_delta = nodeLocation - self.object:get_pos()
+        local new_player_pos = object:get_pos() + movement_delta
+        -- disallow pushing player into walls
+        if not player_can_stand_at(new_player_pos) then return false end
+        object:move_to(new_player_pos, true)
+      end
+    end
     -- Take Action
     self.object:move_to(nodeLocation, true)
     return true
