@@ -19,6 +19,42 @@ local supported_tools = {
   "mcl_tools:pick_diamond"
 }
 
+-- returns the wear for one use,
+-- such that the given number of uses will break the tool
+function get_wear_for_uses(uses)
+  return 65535 / (uses-1)
+end
+
+local tool_usages = {
+  ["mcl_tools:pick_wood"] = 60,
+  ["mcl_tools:pick_stone"] = 132,
+  ["mcl_tools:pick_iron"] = 251,
+  ["mcl_tools:pick_gold"] = 33,
+  ["mcl_tools:pick_diamond"] = 1562
+}
+local tool_wear_rates = {}
+for i=1,#supported_tools do
+  local tool = supported_tools[i]
+  local usage = tool_usages[tool]
+  local wear_rate = get_wear_for_uses(usage)
+  tool_wear_rates[tool] = wear_rate
+  -- minetest.debug(tool .. " wear rate " .. wear_rate)
+end
+
+function round(num)
+  return math.floor(num + 0.5)
+end
+
+function get_remaining_uses(tool_name, wear_value)
+  if not is_supported_toolname(tool_name) then
+    return 0
+  end
+  local total_uses = tool_usages[tool_name]
+  local single_use = tool_wear_rates[tool_name]
+  local spent_uses = round(wear_value / single_use)
+  return total_uses - spent_uses
+end
+
 local craftSquares = {1, 2, 3, 5, 6, 7, 9, 10, 11}
 local TURTLE_INVENTORYSIZE = 4 * 4
 
@@ -359,22 +395,9 @@ function TurtleEntity:pickaxe_can_dig(node)
   return tool_hardness >= node_hardness
 end
 
--- returns the wear for one use,
--- such that the given number of uses will break the tool
-function get_wear_for_uses(uses)
-  return 65535 / (uses-1)
-end
-
 function TurtleEntity:increment_tool_uses()
   local tool_stack = self.toolinv:get_stack("toolmain", 1)
   local table = tool_stack:to_table()
-  local tool_wear_rates = {
-    ["mcl_tools:pick_wood"] = get_wear_for_uses(60),
-    ["mcl_tools:pick_stone"] = get_wear_for_uses(132),
-    ["mcl_tools:pick_iron"] = get_wear_for_uses(251),
-    ["mcl_tools:pick_gold"] = get_wear_for_uses(33),
-    ["mcl_tools:pick_diamond"] = get_wear_for_uses(1562)
-  }
   local wear_increment = tool_wear_rates[table.name]
   -- minetest.debug("Wear: " .. table.wear)
   if table.wear > 65535 - wear_increment then
@@ -1164,6 +1187,44 @@ function TurtleEntity:dropDown(amount)
     return self:itemDrop(self:getLocDown(), amount)
 end
 
+function get_stack_json(name, count, remaining_uses)
+  return '{"name":"' .. name .. '","remaining_uses":' .. remaining_uses .. ',"count":' .. count .. '}'
+end
+
+function get_stack_description(stack)
+  local nilstack = get_stack_json("", 0, 0)
+  if stack == nil then
+    return nilstack
+  end
+  local table = stack:to_table()
+  if table == nil then
+    return nilstack
+  end
+  local name = table.name
+  local wear = table.wear or 0
+  local remaining_uses = get_remaining_uses(name, wear)
+  -- note minetest.write_json erroneously converts integers to floats
+  return get_stack_json(name, stack:get_count(), remaining_uses)
+  -- return json.encode({
+  --   ["name"] = tool_name,
+  --   ["remaining_uses"] = remaining_uses
+  -- })
+end
+
+function TurtleEntity:getCurrentTool()
+  local tool_stack = self.toolinv:get_stack("toolmain", 1)
+  return get_stack_description(tool_stack)
+end
+
+function TurtleEntity:getItemDetail(slot)
+  local slot = slot or self:getSelectedSlot()
+  if not isValidInventoryIndex(slot) then
+    return "error: invalid slot number"
+  end
+  local stack = self:getTurtleslot(slot)
+  return get_stack_description(stack)
+end
+
 function TurtleEntity:listen() self:update_is_listening(true) end
 
 function TurtleEntity:stopListen() self:update_is_listening(false) end
@@ -1206,12 +1267,13 @@ end
 local function is_command_approved(turtle_command)
     local direct_commands = {
         "forward", "turnLeft", "turnRight", "back", "up", "down",
-        "getSelectedSlot", "detectLeft", "detectRight"
+        "getSelectedSlot", "detectLeft", "detectRight", "getCurrentTool",
+        "getItemDetail"
     }
     for _, dc in pairs(direct_commands) do
         if turtle_command == "turtle." .. dc .. "()" then return true end
     end
-    local single_number_commands = {"select", "getItemCount", "craft"}
+    local single_number_commands = {"select", "getItemCount", "craft", "getItemDetail"}
     for _, snc in pairs(single_number_commands) do
         if turtle_command:find("^turtle%." .. snc .. "%( *%d+%)$") ~= nil then
             return true
@@ -1279,8 +1341,6 @@ end
 -- Inventory Interface
 -- MAIN INVENTORY COMMANDS--------------------------
 
----Ex: turtle:itemGet(3):get_name() -> "default:stone"
-function TurtleEntity:itemGet(turtleslot) return self:getTurtleslot(turtleslot) end
 ---    Swaps itemstacks in slots A and B
 function TurtleEntity:itemSwapTurtleslot(turtleslotA, turtleslotB)
     if (not isValidInventoryIndex(turtleslotA)) or
