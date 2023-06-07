@@ -422,6 +422,8 @@ function TurtleEntity:mine(nodeLocation)
     if minetest.dig_node(nodeLocation) then
       self:increment_tool_uses()
       return true
+    else
+      return false
     end
 end
 
