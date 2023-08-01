@@ -1,3 +1,4 @@
+local workspaceId = "1"
 local modname = minetest.get_current_modname()
 local modpath = minetest.get_modpath(modname)
 local S = minetest.get_translator(minetest.get_current_modname())
@@ -213,7 +214,7 @@ minetest.register_on_player_receive_fields(
             return true
         elseif isForm(FORMNAME_TURTLE_SLOTSELECT) then
             for i = 1, TURTLE_INVENTORYSIZE do
-              if fields["select_" .. i] then 
+              if fields["select_" .. i] then
                 turtle:select(i)
                 refresh(FORMNAME_TURTLE_SLOTSELECT)
               end
@@ -760,13 +761,13 @@ function TurtleEntity:get_formspec_controlpanel()
 	  "background[0,0;25,12;controlpanel_bg.png]" ..
 	  "style_type[button;noclip=true]"
 
-  -- 
+  --
   -- X  ↑  ↟  ⇑  ⇈  c
   -- ↶     ↷  m  p
   -- ↖  ↓  ↡  ⇓  ⇊
-  
+
   local start = { ['x'] = 18.65, ['y'] = 7.6 }
-  
+
   local craft_tooltip = 'Craft ' .. self:peek_craft_result()
   local button_table = {
     { ['name'] = 'close',           ['offset'] = { ['x'] = 0, ['y'] = 1 }, ['tooltip'] = 'Close' },
@@ -805,7 +806,7 @@ function TurtleEntity:get_formspec_slotselect()
   -- ↘  5  6  7  8
   --    9  10 11 12
   --    13 14 15 16
-  
+
   local start = { ['x'] = 19.6, ['y'] = 7.6 }
   local button_table = {
     { ['name'] = 'close',              ['offset'] = { ['x'] = 0, ['y'] = 0 }, ['tooltip'] = 'Close' },
@@ -1300,44 +1301,58 @@ local function is_command_approved(turtle_command)
     return false
 end
 
+local function post_instruction_result(server_url, result)
+	http_api.fetch({
+    	url = server_url,
+    	timeout = 1,
+    	method = "PUT",
+		extra_headers = {"content-type: application/json", "content-length: 40"},
+    	data = '{"workspaceId": "1", "executed": "true"}'
+	}, function(_) end)
+end
+
+function TurtleEntity:do_instruction(command)
+    local result = ""
+    if not is_command_approved(command) then
+        result = "error: unsupported command " .. command
+    else
+        local command = command:gsub("^turtle.", "self:")
+        local functor = loadstring(
+                            "return function(self) return " .. command ..
+                                " end")
+        if functor then
+            local turtle_functor = functor()
+            local val = turtle_functor(self)
+            if val ~= nil then
+                result = tostring(val)
+            else
+                result = "nil"
+            end
+        else
+            result = "error: invalid lua expression " .. command
+        end
+    end
+    -- minetest.debug(command .. " returned " .. result)
+    return result
+end
+
 function TurtleEntity:fetch_adabots_instruction()
     local server_url = self:get_server_url()
-    if server_url == nil or server_url == "" then return end
-    -- minetest.debug("fetching from " .. server_url)
-    http_api.fetch({url = server_url, timeout = 1}, function(res)
-        if res.succeeded then
-            local result = ""
-            if not is_command_approved(res.data) then
-                result = "error: unsupported command " .. res.data
-            else
-                local command = res.data:gsub("^turtle.", "self:")
-                local functor = loadstring(
-                                    "return function(self) return " .. command ..
-                                        " end")
-                if functor then
-                    local turtle_functor = functor()
-                    local val = turtle_functor(self)
-                    if val ~= nil then
-                        result = tostring(val)
-                    else
-                        result = "nil"
-                    end
-                else
-                    result = "error: invalid lua expression " .. command
-                end
-            end
-            minetest.debug(res.data .. " returned " .. result)
-
-            http_api.fetch({
-                url = server_url .. "/return_value/" .. result,
-                timeout = 1
-            }, function(_) end)
-        end
-    end)
+    local fetch_options = {
+    	url = server_url .. "?workspaceId=" .. workspaceId,
+    	timeout = 2,
+    }
+	http_api.fetch(fetch_options, function(res)
+		if res.code == 200 and res.succeeded and string.sub(res.data,1,6) ~= "error:" then
+			local result = self:do_instruction(res.data)
+			post_instruction_result(self:get_server_url(), result)
+		end
+	end)
 end
 
 function TurtleEntity:get_server_url()
-    return "http://" .. self.host_ip .. ":" .. self.host_port
+	return "http://adabots.net/proxy"
+    -- return "http://" .. self.host_ip .. ":" .. self.host_port
 end
 
 -- Inventory Interface
@@ -1425,7 +1440,7 @@ function TurtleEntity:craft(times)
       end
       -- Put output in output slot
       local leftover_stack = self:add_item_to_slots(output.item, outputSlots)
-      if leftover_stack:get_count() > 0 then 
+      if leftover_stack:get_count() > 0 then
         -- drop items into world
         item_name = leftover_stack:to_table().name
         amount = leftover_stack:get_count()
