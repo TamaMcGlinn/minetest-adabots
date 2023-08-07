@@ -1,4 +1,3 @@
-local workspaceId = "1"
 local modname = minetest.get_current_modname()
 local modpath = minetest.get_modpath(modname)
 local S = minetest.get_translator(minetest.get_current_modname())
@@ -86,25 +85,6 @@ local NAMETAG_DELTA_Z = -2
 ---@returns TurtleEntity of that ID
 local function getTurtle(id) return adabots.turtles[id] end
 
----@returns whether the host-port pair is free (only one turtle can listen on each host-port pair)
-local function checkPortFree(host, port_number)
-    for i = 1, adabots.num_turtles do
-        local bot = adabots.turtles[i]
-        if bot == nil then
-            minetest.debug("Error: nil bot")
-        else
-            if bot.is_listening and (host == bot.host_ip) and
-                (port_number == bot.host_port) then
-                minetest.debug("Error: " .. bot.name ..
-                                   " is already listening on " .. host .. ":" ..
-                                   port_number)
-                return false
-            end
-        end
-    end
-    return true
-end
-
 ---@returns true if given index is in range [1, TURTLE_INVENTORYSIZE]
 local function isValidInventoryIndex(index)
     return 0 < index and index <= TURTLE_INVENTORYSIZE
@@ -184,24 +164,15 @@ minetest.register_on_player_receive_fields(
           if fields.open_slotselect then turtle:open_slotselect(player_name) end
           if fields.craft then turtle:craft(1) end
           if fields.listen then
-              if turtle.is_listening or
-                  checkPortFree(turtle.host_ip, turtle.host_port) then
-                  turtle:toggle_is_listening()
-                  refresh(turtleform)
-              end
+              turtle:toggle_is_listening()
+              refresh(turtleform)
               return true
           end
         end
         if isForm(FORMNAME_TURTLE_INVENTORY) then
             updateBotField(turtle, fields, "name",
                            function() turtle:update_nametag() end)
-            updateBotField(turtle, fields, "host_ip", function()
-                if turtle.is_listening then
-                    turtle:stopListen()
-                    refresh(turtleform)
-                end
-            end)
-            updateBotField(turtle, fields, "host_port", function()
+            updateBotField(turtle, fields, "workspaceId", function()
                 if turtle.is_listening then
                     turtle:stopListen()
                     refresh(turtleform)
@@ -685,16 +656,12 @@ function TurtleEntity:get_formspec_inventory()
                                     F(
                                         minetest.colorize("#313131",
                                                           "Connection settings")) ..
-                                    "]" .. "field[0.3,2.7;3.0,0.5;host_ip;;" ..
+                                    "]" .. "field[0.3,2.7;3.0,0.5;workspaceId;;" ..
                                     F(
                                         minetest.colorize("#313131",
-                                                          self.host_ip or
+                                                          self.workspaceId or
                                                               "localhost")) ..
-                                    "]" .. "field[3.2,2.7;1.1,0.5;host_port;;" ..
-                                    F(
-                                        minetest.colorize("#313131",
-                                                          self.host_port or
-                                                              "7112")) .. "]"
+                                    "]"
 
     local turtle_inventory = "label[" .. turtle_inv_x .. "," .. turtle_inv_y -
                                  0.55 .. ";" ..
@@ -871,8 +838,7 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     adabots.num_turtles = adabots.num_turtles + 1
     self.id = adabots.num_turtles
     self.name = data.name or "Bob"
-    self.host_ip = data.host_ip or "localhost"
-    self.host_port = data.host_port or 7112
+    self.workspaceId = data.workspaceId or "1"
     self.is_listening = data.is_listening or false
     -- self.owner = minetest.get_meta(pos):get_string("owner")
     self.heading = data.heading or 0
@@ -1066,8 +1032,7 @@ function TurtleEntity:get_staticdata()
     return minetest.serialize({
         id = self.id,
         name = self.name,
-        host_ip = self.host_ip,
-        host_port = self.host_port,
+        workspaceId = self.workspaceId,
         is_listening = self.is_listening,
         heading = self.heading,
         previous_answers = self.previous_answers,
@@ -1301,13 +1266,14 @@ local function is_command_approved(turtle_command)
     return false
 end
 
-local function post_instruction_result(server_url, result)
+local function post_instruction_result(server_url, workspaceId, result)
+	local data = '{"workspaceId": "' .. workspaceId .. '", "returnValue": "' .. result .. '"}'
 	http_api.fetch({
     	url = server_url,
     	timeout = 1,
     	method = "PUT",
-		extra_headers = {"content-type: application/json", "content-length: 40"},
-    	data = '{"workspaceId": "1", "executed": "true"}'
+		extra_headers = {"content-type: application/json", "content-length: " .. string.len(data)},
+    	data = data
 	}, function(_) end)
 end
 
@@ -1339,20 +1305,19 @@ end
 function TurtleEntity:fetch_adabots_instruction()
     local server_url = self:get_server_url()
     local fetch_options = {
-    	url = server_url .. "?workspaceId=" .. workspaceId,
+    	url = server_url .. "?workspaceId=" .. self.workspaceId,
     	timeout = 2,
     }
 	http_api.fetch(fetch_options, function(res)
-		if res.code == 200 and res.succeeded and string.sub(res.data,1,6) ~= "error:" then
+		if res.code == 200 and res.succeeded and string.sub(res.data,1,6) ~= "error:" and res.data ~= "" then
 			local result = self:do_instruction(res.data)
-			post_instruction_result(self:get_server_url(), result)
+			post_instruction_result(self:get_server_url(), self.workspaceId, result)
 		end
 	end)
 end
 
 function TurtleEntity:get_server_url()
 	return "http://adabots.net/proxy"
-    -- return "http://" .. self.host_ip .. ":" .. self.host_port
 end
 
 -- Inventory Interface
