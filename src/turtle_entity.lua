@@ -113,7 +113,7 @@ local function deserializeInventory(inv, str)
 end
 
 local function updateBotField(turtle, fields, field_key, field_changed_functor)
-    field_value = fields[field_key]
+    local field_value = fields[field_key]
     if field_value then
         if turtle[field_key] ~= field_value then
             turtle[field_key] = field_value
@@ -1536,4 +1536,3 @@ minetest.register_entity("adabots:pick_stone", set_pickaxe_properties("pick_ston
 minetest.register_entity("adabots:pick_iron", set_pickaxe_properties("pick_iron.png"))
 minetest.register_entity("adabots:pick_gold", set_pickaxe_properties("pick_gold.png"))
 minetest.register_entity("adabots:pick_diamond", set_pickaxe_properties("pick_diamond.png"))
-
