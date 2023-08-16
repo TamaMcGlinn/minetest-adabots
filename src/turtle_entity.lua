@@ -41,6 +41,21 @@ for i=1,#supported_tools do
   -- minetest.debug(tool .. " wear rate " .. wear_rate)
 end
 
+function map(f, t)
+    local t1 = {}
+    local next = 1
+    for k,v in ipairs(t) do
+        t1[next] = f(v)
+        next = next + 1
+    end
+    return t1
+end
+
+function get_workspace_names()
+	local result = map((function (element) return element["name"] end), adabots.workspaces)
+	return result
+end
+
 function round(num)
   return math.floor(num + 0.5)
 end
@@ -170,14 +185,11 @@ minetest.register_on_player_receive_fields(
           end
         end
         if isForm(FORMNAME_TURTLE_INVENTORY) then
+            if fields.workspace then
+            	turtle:select_workspace(fields.workspace)
+            end
             updateBotField(turtle, fields, "name",
                            function() turtle:update_nametag() end)
-            updateBotField(turtle, fields, "workspaceId", function()
-                if turtle.is_listening then
-                    turtle:stopListen()
-                    refresh(turtleform)
-                end
-            end)
             respond_to_common_controls()
             return true
         elseif isForm(FORMNAME_TURTLE_CONTROLPANEL) then
@@ -655,13 +667,8 @@ function TurtleEntity:get_formspec_inventory()
                                     "label[0.4,1.8;" ..
                                     F(
                                         minetest.colorize("#313131",
-                                                          "Connection settings")) ..
-                                    "]" .. "field[0.3,2.7;3.0,0.5;workspaceId;;" ..
-                                    F(
-                                        minetest.colorize("#313131",
-                                                          self.workspaceId or
-                                                              "localhost")) ..
-                                    "]"
+                                                          "Workspace:")) ..
+                                    "]" .. "dropdown[0,2.2;4.0;workspace;" .. table.concat(get_workspace_names(), ",") .. ";" .. self:get_workspace_index() .. ";true]"
 
     local turtle_inventory = "label[" .. turtle_inv_x .. "," .. turtle_inv_y -
                                  0.55 .. ";" ..
@@ -710,6 +717,39 @@ local function render_buttons(start, button_table)
                "tooltip[" .. b.name .. ";" .. b.tooltip .. "]"
   end
   return buttons
+end
+
+function TurtleEntity:get_workspace_index()
+	if self.workspace == nil then
+		print("nil workspace")
+		return 0
+	end
+	local index = 1
+	for _,workspace in ipairs(adabots.workspaces) do
+		if workspace["id"] == self.workspace["id"] then
+			return index
+		end
+		index = index + 1
+	end
+	minetest.debug("Error: Current workspace not in list! " .. dump(self.workspace))
+	return 0
+end
+
+function TurtleEntity:select_workspace(index)
+	local index = tonumber(index)
+	print("Index passed " .. index .. " type " .. type(index))
+	local i = 1
+	for _,workspace in ipairs(adabots.workspaces) do
+		print("Trying index " .. i .. " type " .. type(i))
+		if i == index then
+			print(i .. " == " .. index)
+			self.workspace = workspace
+			return
+		end
+		print(i .. " != " .. index)
+		i = i + 1
+	end
+	minetest.debug("Error: index " .. index .. " out of range for workspaces: " .. dump(adabots.workspaces))
 end
 
 function TurtleEntity:get_formspec_controlpanel()
@@ -838,7 +878,7 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     adabots.num_turtles = adabots.num_turtles + 1
     self.id = adabots.num_turtles
     self.name = data.name or "Bob"
-    self.workspaceId = data.workspaceId or "1"
+    self.workspace = data.workspace
     self.is_listening = data.is_listening or false
     -- self.owner = minetest.get_meta(pos):get_string("owner")
     self.heading = data.heading or 0
@@ -1032,7 +1072,7 @@ function TurtleEntity:get_staticdata()
     return minetest.serialize({
         id = self.id,
         name = self.name,
-        workspaceId = self.workspaceId,
+        workspace = self.workspace,
         is_listening = self.is_listening,
         heading = self.heading,
         previous_answers = self.previous_answers,
@@ -1304,14 +1344,18 @@ end
 
 function TurtleEntity:fetch_adabots_instruction()
     local server_url = self:get_server_url()
+    if self.workspace == nil then
+    	return
+    end
+    local workspaceId = self.workspace["id"]
     local fetch_options = {
-    	url = server_url .. "?workspaceId=" .. self.workspaceId,
+    	url = server_url .. "?workspaceId=" .. workspaceId,
     	timeout = 2,
     }
 	http_api.fetch(fetch_options, function(res)
 		if res.code == 200 and res.succeeded and string.sub(res.data,1,6) ~= "error:" and res.data ~= "" then
 			local result = self:do_instruction(res.data)
-			post_instruction_result(self:get_server_url(), self.workspaceId, result)
+			post_instruction_result(self:get_server_url(), workspaceId, result)
 		end
 	end)
 end

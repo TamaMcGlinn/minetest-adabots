@@ -9,7 +9,8 @@ adabots = {
         debug = true
     },
     turtles = {},
-    num_turtles = 0
+    num_turtles = 0,
+    workspaces = {}
 }
 
 http_api = minetest.request_http_api()
