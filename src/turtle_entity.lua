@@ -1306,8 +1306,8 @@ local function is_command_approved(turtle_command)
     return false
 end
 
-local function post_instruction_result(server_url, workspaceId, result)
-	local data = '{"workspaceId": "' .. workspaceId .. '", "returnValue": "' .. result .. '"}'
+local function post_instruction_result(server_url, workspaceId, result, bot_name)
+	local data = '{"workspaceId": "' .. workspaceId .. '", "botName": "' .. bot_name .. '", "returnValue": "' .. result .. '"}'
 	http_api.fetch({
     	url = server_url,
     	timeout = 1,
@@ -1349,13 +1349,13 @@ function TurtleEntity:fetch_adabots_instruction()
     end
     local workspaceId = self.workspace["id"]
     local fetch_options = {
-    	url = server_url .. "?workspaceId=" .. workspaceId,
+    	url = server_url .. "?workspaceId=" .. workspaceId .. "&botName=" .. self.name,
     	timeout = 2,
     }
 	http_api.fetch(fetch_options, function(res)
 		if res.code == 200 and res.succeeded and string.sub(res.data,1,6) ~= "error:" and res.data ~= "" then
 			local result = self:do_instruction(res.data)
-			post_instruction_result(self:get_server_url(), workspaceId, result)
+			post_instruction_result(self:get_server_url(), workspaceId, result, self.name)
 		end
 	end)
 end
