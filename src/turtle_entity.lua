@@ -1,3 +1,6 @@
+-- override this by setting ADABOTS_PROXY_URL environment variable to your own proxy URL
+local proxy_url = os.getenv("ADABOTS_PROXY_URL") or "http://adabots.net/proxy"
+
 local modname = minetest.get_current_modname()
 local modpath = minetest.get_modpath(modname)
 local S = minetest.get_translator(minetest.get_current_modname())
@@ -1428,7 +1431,7 @@ function TurtleEntity:fetch_adabots_instruction()
     end)
 end
 
-function TurtleEntity:get_server_url() return "http://adabots.net/proxy" end
+function TurtleEntity:get_server_url() return proxy_url end
 
 -- Inventory Interface
 -- MAIN INVENTORY COMMANDS--------------------------
