@@ -735,8 +735,8 @@ function TurtleEntity:get_workspace_index()
         if workspace["id"] == self.workspace["id"] then return index end
         index = index + 1
     end
-    minetest.debug("Error: Current workspace not in list! " ..
-                       dump(self.workspace))
+    -- minetest.debug("Error: Current workspace not in list! " ..
+    --                    dump(self.workspace))
     return 0
 end
 
@@ -962,7 +962,6 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
     end
 
     -- Reset state
-    minetest.debug("AdaBots State standby")
     self.state = "standby"
 
     -- Restart listening
@@ -1357,7 +1356,6 @@ local function post_instruction_result(server_url, workspaceId, result,
                                        bot_name, state_reset_functor)
     local data = '{"workspaceId": "' .. workspaceId .. '", "botName": "' ..
                      bot_name .. '", "returnValue": "' .. result .. '"}'
-    minetest.debug("AdaBots returning " .. data)
     local verify_result = function(res_data)
         if res_data ~= "returnValue changed to '" .. result ..
             "' for bot state of workspaceId " .. workspaceId .. " and bot name " ..
@@ -1400,18 +1398,13 @@ function TurtleEntity:do_instruction(command)
             result = "error: invalid lua expression " .. command
         end
     end
-    minetest.debug("AdaBots State returning")
     self.state = "returning"
     -- minetest.debug(command .. " returned " .. result)
     return result
 end
 
 function TurtleEntity:fetch_adabots_instruction()
-    if self.state ~= "standby" then
-        minetest.debug("AdaBots no fetch now, state " .. self.state)
-        return
-    end
-    minetest.debug("AdaBots State fetching")
+    if self.state ~= "standby" then return end
     self.state = "fetching"
     local server_url = self:get_server_url()
     if self.workspace == nil then return end
@@ -1427,12 +1420,9 @@ function TurtleEntity:fetch_adabots_instruction()
             "error:" and res.data ~= "" then
             local result = self:do_instruction(res.data)
             post_instruction_result(self:get_server_url(), workspaceId, result,
-                                    self.name, function()
-                minetest.debug("AdaBots State standby (done returning)")
-                self.state = "standby"
-            end)
+                                    self.name,
+                                    function() self.state = "standby" end)
         else
-            minetest.debug("AdaBots State standby")
             self.state = "standby"
         end
     end)
