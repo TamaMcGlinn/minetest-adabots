@@ -62,9 +62,10 @@ function map(f, t)
 end
 
 function get_workspace_names()
-    local result = map((function(element) return element["name"] end),
-                       adabots.workspaces)
-    return result
+    return {}
+    -- local result = map((function(element) return element["name"] end),
+    --                    adabots.workspaces)
+    -- return result
 end
 
 function round(num) return math.floor(num + 0.5) end
