@@ -1097,6 +1097,7 @@ local function generate_texture(text)
 end
 
 function TurtleEntity:update_nametag()
+    if not minetest.get_modpath("mcl_signs") then return end
     local pos = self:getLocRelative(0, 1, 0)
 
     -- remove if we already have one
@@ -1562,6 +1563,7 @@ function TurtleEntity:itemRefuel(turtleslot)
 end
 
 function TurtleEntity:setSleepingTexture()
+    if not minetest.get_modpath("mcl_signs") then return end
     if self.light_blocker ~= nil then self.light_blocker:remove() end
     self.light_blocker = minetest.add_entity({x = 0, y = 0, z = 0},
                                              "mcl_signs:text")
