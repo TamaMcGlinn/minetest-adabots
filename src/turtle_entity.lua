@@ -51,7 +51,7 @@ for i = 1, #supported_tools do
     -- minetest.debug(tool .. " wear rate " .. wear_rate)
 end
 
-function map(f, t)
+function adabots.map(f, t)
     local t1 = {}
     local next = 1
     for k, v in ipairs(t) do
@@ -61,11 +61,10 @@ function map(f, t)
     return t1
 end
 
-function get_workspace_names()
-    return {}
-    -- local result = map((function(element) return element["name"] end),
-    --                    adabots.workspaces)
-    -- return result
+function adabots.get_workspace_names()
+    local result = adabots.map((function(element) return element["name"] end),
+                               adabots.workspaces)
+    return result
 end
 
 function round(num) return math.floor(num + 0.5) end
@@ -674,9 +673,9 @@ function TurtleEntity:get_formspec_inventory()
                                     "label[0.4,1.8;" ..
                                     F(minetest.colorize("#313131", "Workspace:")) ..
                                     "]" .. "dropdown[0,2.2;4.0;workspace;" ..
-                                    table.concat(get_workspace_names(), ",") ..
-                                    ";" .. self:get_workspace_index() ..
-                                    ";true]"
+                                    table.concat(adabots.get_workspace_names(),
+                                                 ",") .. ";" ..
+                                    self:get_workspace_index() .. ";true]"
 
     local turtle_inventory = "label[" .. turtle_inv_x .. "," .. turtle_inv_y -
                                  0.55 .. ";" ..
