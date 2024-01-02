@@ -1358,8 +1358,12 @@ end
 
 local function post_instruction_result(server_url, workspaceId, result,
                                        bot_name, state_reset_functor)
-    local data = '{"workspaceId": "' .. workspaceId .. '", "botName": "' ..
-                     bot_name .. '", "returnValue": "' .. result .. '"}'
+    local set_result_options = {
+        url = server_url .. "/set_return_value?workspaceId=" .. workspaceId ..
+            "&botName=" .. bot_name .. "&returnValue=" .. result,
+        method = "GET",
+        timeout = 1
+    }
     local verify_result = function(res_data)
         if res_data ~= "returnValue changed to '" .. result ..
             "' for bot state of workspaceId " .. workspaceId .. " and bot name " ..
@@ -1367,16 +1371,7 @@ local function post_instruction_result(server_url, workspaceId, result,
             minetest.debug("error while returning: " .. res_data)
         end
     end
-    http_api.fetch({
-        url = server_url,
-        timeout = 1,
-        method = "PUT",
-        extra_headers = {
-            "content-type: application/json",
-            "content-length: " .. string.len(data)
-        },
-        data = data
-    }, function(res)
+    http_api.fetch(set_result_options, function(res)
         verify_result(res.data)
         state_reset_functor()
     end)
@@ -1416,6 +1411,7 @@ function TurtleEntity:fetch_adabots_instruction()
     local fetch_options = {
         url = server_url .. "?workspaceId=" .. workspaceId .. "&botName=" ..
             self.name,
+        method = "GET",
         timeout = 1
     }
     -- minetest.debug("Fetching from " .. fetch_options.url)
