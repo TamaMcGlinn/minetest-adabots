@@ -1,5 +1,6 @@
 -- override this by setting ADABOTS_PROXY_URL environment variable to your own proxy URL
-local proxy_url = os.getenv("ADABOTS_PROXY_URL") or "http://adabots.net/proxy"
+local proxy_url = os.getenv("ADABOTS_PROXY_URL") or
+                      "http://adabots.net/instruction_proxy"
 
 local modname = minetest.get_current_modname()
 local modpath = minetest.get_modpath(modname)
