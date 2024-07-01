@@ -1360,7 +1360,7 @@ end
 local function post_instruction_result(server_url, workspaceId, result,
                                        bot_name, state_reset_functor)
     local set_result_options = {
-        url = server_url .. "/set_return_value?workspaceId=" .. workspaceId ..
+        url = server_url .. "/patch?workspaceId=" .. workspaceId ..
             "&botName=" .. bot_name .. "&returnValue=" .. result,
         method = "GET",
         timeout = 1
@@ -1410,7 +1410,7 @@ function TurtleEntity:fetch_adabots_instruction()
     if self.workspace == nil then return end
     local workspaceId = self.workspace["id"]
     local fetch_options = {
-        url = server_url .. "?workspaceId=" .. workspaceId .. "&botName=" ..
+        url = server_url .. "/get?workspaceId=" .. workspaceId .. "&botName=" ..
             self.name,
         method = "GET",
         timeout = 1
