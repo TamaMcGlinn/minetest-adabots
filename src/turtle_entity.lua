@@ -1,5 +1,6 @@
 -- override this by setting ADABOTS_PROXY_URL environment variable to your own proxy URL
-local proxy_url = os.getenv("INSTRUCTION_PROXY_BASE_URL") or nil
+local INSTRUCTION_PROXY_URL = os.getenv("INSTRUCTION_PROXY_BASE_URL") or nil
+print("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
 
 local modname = minetest.get_current_modname()
 local modpath = minetest.get_modpath(modname)
@@ -1428,7 +1429,7 @@ function TurtleEntity:fetch_adabots_instruction()
     end)
 end
 
-function TurtleEntity:get_server_url() return proxy_url end
+function TurtleEntity:get_server_url() return INSTRUCTION_PROXY_URL end
 
 -- Inventory Interface
 -- MAIN INVENTORY COMMANDS--------------------------
