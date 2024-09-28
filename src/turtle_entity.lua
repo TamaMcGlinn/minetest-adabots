@@ -1039,13 +1039,13 @@ function TurtleEntity:on_rightclick(clicker)
   self:open_inventory(clicker:get_player_name())
 end
 
-function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities,
-  direction, damage)
-  if not puncher or not puncher:is_player() then return end
+function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities, direction, damage)
+  if not puncher or not puncher:is_player() then
+    minetest.log("warning", "[adabots] : Non-player punched bot; this does nothing")
+    return true -- returning true ensures the bot doesn't disappear when it gets to 0 hp. It should stop damage entirely according to lua_api.txt
+  end
   self:open_controlpanel(puncher:get_player_name())
-  -- if time_from_last_punch < 0.5 then
-  --     minetest.debug("double clicked " .. self.name)
-  -- end
+  return true
 end
 
 local function generate_line(s, ypos)
