@@ -1,6 +1,6 @@
 -- override this by setting ADABOTS_PROXY_URL environment variable to your own proxy URL
 local INSTRUCTION_PROXY_URL = os.getenv("INSTRUCTION_PROXY_BASE_URL") or nil
-print("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
+minetest.log("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
 
 local modname = minetest.get_current_modname()
 local modpath = minetest.get_modpath(modname)
