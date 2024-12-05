@@ -563,7 +563,7 @@ function TurtleEntity:sucknode(nodeLocation, maxAmount)
 end
 
 function TurtleEntity:detectnode(nodeLocation)
-  return not node_walkable(nodeLocation)
+  return node_walkable(nodeLocation)
 end
 
 function TurtleEntity:itemDrop(nodeLocation, amount)
