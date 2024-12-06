@@ -28,7 +28,9 @@ local turtle_forms = {
 }
 local supported_tools = {
   "mcl_tools:pick_wood", "mcl_tools:pick_stone", "mcl_tools:pick_iron",
-  "mcl_tools:pick_gold", "mcl_tools:pick_diamond"
+  "mcl_tools:pick_gold", "mcl_tools:pick_diamond",
+  "default:pick_wood", "default:pick_stone", "default:pick_iron",
+  "default:pick_gold", "default:pick_diamond"
 }
 
 -- returns the wear for one use,
@@ -40,7 +42,12 @@ local tool_usages = {
   ["mcl_tools:pick_stone"] = 132,
   ["mcl_tools:pick_iron"] = 251,
   ["mcl_tools:pick_gold"] = 33,
-  ["mcl_tools:pick_diamond"] = 1562
+  ["mcl_tools:pick_diamond"] = 1562,
+  ["default:pick_wood"] = 60,
+  ["default:pick_stone"] = 132,
+  ["default:pick_iron"] = 251,
+  ["default:pick_gold"] = 33,
+  ["default:pick_diamond"] = 1562
 }
 local tool_wear_rates = {}
 for i = 1, #supported_tools do
@@ -998,7 +1005,8 @@ end
 
 function get_pickaxe_entity_name(tool_name)
   -- mcl_tools:pick_wood => adabots:pick_wood
-  return "adabots" .. string.sub(tool_name, 10, -1)
+  -- default:pick_wood => adabots:pick_wood
+  return tool_name:gsub("^.*:", "adabots:")
 end
 
 function TurtleEntity:add_pickaxe_model()
