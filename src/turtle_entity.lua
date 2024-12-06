@@ -2,9 +2,8 @@
 local INSTRUCTION_PROXY_URL = os.getenv("INSTRUCTION_PROXY_BASE_URL") or nil
 minetest.log("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
 
-local modname = minetest.get_current_modname()
-local modpath = minetest.get_modpath(modname)
-local S = minetest.get_translator(minetest.get_current_modname())
+local modpath = minetest.get_modpath("adabots")
+local S = minetest.get_translator("adabots")
 local F = minetest.formspec_escape
 
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
@@ -1595,7 +1594,17 @@ end
 
 function TurtleEntity:dump(object) return dump(object) end
 
-minetest.register_entity("adabots:turtle", TurtleEntity)
+local function register_or_override_entity(entity_name, entity_definition)
+  if minetest.registered_entities[entity_name] then
+    -- override
+    minetest.registered_entities[entity_name] = entity_definition
+  else
+    -- define new entity
+    minetest.register_entity(entity_name, entity_definition)
+  end
+end
+
+register_or_override_entity("adabots:turtle", TurtleEntity)
 
 -- https://stackoverflow.com/a/16077650/2144408
 local function deepcopy(o, seen)
@@ -1644,14 +1653,14 @@ function set_pickaxe_properties(texture)
   return entity
 end
 
-minetest.register_entity("adabots:pick_wood",
+register_or_override_entity("adabots:pick_wood",
   set_pickaxe_properties("pick_wood.png"))
-minetest.register_entity("adabots:pick_stone",
+register_or_override_entity("adabots:pick_stone",
   set_pickaxe_properties("pick_stone.png"))
-minetest.register_entity("adabots:pick_iron",
+register_or_override_entity("adabots:pick_iron",
   set_pickaxe_properties("pick_iron.png"))
-minetest.register_entity("adabots:pick_gold",
+register_or_override_entity("adabots:pick_gold",
   set_pickaxe_properties("pick_gold.png"))
-minetest.register_entity("adabots:pick_diamond",
+register_or_override_entity("adabots:pick_diamond",
   set_pickaxe_properties("pick_diamond.png"))
 
