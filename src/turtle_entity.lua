@@ -406,10 +406,43 @@ function TurtleEntity:increment_tool_uses()
   end
 end
 
+function TurtleEntity:get_liquid_from(node_name)
+  local registered_liquid = bucket.liquids[node_name]
+  if registered_liquid == nil then return nil end
+  if registered_liquid["source"] == node_name then return registered_liquid["itemname"] end
+  return nil -- it's not the source, can't pick it up
+end
+
+function TurtleEntity:can_pickup_liquid()
+  local stack = self:getTurtleslot(self.selected_slot)
+  if stack == nil then
+    return false
+  end
+  return stack:get_name() == "bucket:bucket_empty"
+end
+
 function TurtleEntity:mine(nodeLocation)
   if nodeLocation == nil then return false end
   local node = minetest.get_node(nodeLocation)
   if node.name == "air" then return false end
+
+  if self:can_pickup_liquid() then
+    local filled_bucket = self:get_liquid_from(node.name)
+    if filled_bucket ~= nil then
+      minetest.set_node(nodeLocation, {name="air"})
+      local current_buckets = self.inv:get_stack("main", self.selected_slot)
+      local num_buckets = current_buckets:get_count()
+      self.inv:set_stack("main", self.selected_slot, filled_bucket)
+      if num_buckets > 1 then
+        current_buckets:set_count(num_buckets - 1)
+        local leftover_stack = self:add_item(current_buckets)
+        minetest.log("leftover stack: " .. dump(leftover_stack))
+        self:drop_items_in_world(leftover_stack)
+      end
+      return true
+    end
+  end
+
   -- check pickaxe strong enough
   if not self:pickaxe_can_dig(node) then return false end
   if minetest.dig_node(nodeLocation) then
@@ -434,18 +467,23 @@ function TurtleEntity:build(nodeLocation)
 
   -- Build and consume item
   local stack = self:getTurtleslot(self.selected_slot)
+  if stack == nil then
+    return false
+  end
   if stack:is_empty() then return false end
-  local newstack, position_placed = minetest.item_place(stack, nil, {
+  local item_name = stack:get_name()
+  local item_registration = minetest.registered_items[item_name]
+  local newstack = item_registration.on_place(stack, nil, {
     type = "node",
     under = nodeLocation,
     above = self:getLoc()
   })
-  -- Consume item
-  newstack:set_count(newstack:get_count() - 1)
+  if newstack == nil then
+    minetest.log("itemstack not modified")
+    return false
+  end
+
   self.inv:set_stack("main", self.selected_slot, newstack)
-
-  if position_placed == nil then return false end
-
   return true
 end
 
@@ -491,7 +529,7 @@ function TurtleEntity:add_item(stack)
     local slot = ((self.selected_slot + i - 1) % TURTLE_INVENTORYSIZE) + 1
     slots[#slots + 1] = slot
   end
-  add_item_to_slots(stack, slots)
+  return self:add_item_to_slots(stack, slots)
 end
 
 function TurtleEntity:add_item_to_slots(stack, slots)
@@ -598,7 +636,7 @@ function TurtleEntity:itemDrop(nodeLocation, amount)
   end
   if amount > 0 then
     -- add items to world
-    for item_count = 1, amount do
+    for _ = 1, amount do
       minetest.add_item(nodeLocation, item_name)
     end
   end
@@ -1373,6 +1411,7 @@ local function post_instruction_result(server_url, workspaceId, result,
     timeout = 1
   }
   local verify_result = function(res_data)
+    -- TODO this got changed, we can't verify anymore like this
     if res_data ~= "returnValue changed to '" .. result ..
       "' for bot state of workspaceId " .. workspaceId .. " and bot name " ..
       bot_name then
@@ -1492,6 +1531,22 @@ function TurtleEntity:peek_craft_result()
   return output.item:get_short_description()
 end
 
+function TurtleEntity:drop_items_in_world(leftover_stack)
+  if leftover_stack == nil then return end
+  if leftover_stack:get_count() == 0 then
+    return
+  end
+  -- drop items into world
+  local item_name = leftover_stack:to_table().name
+  local amount = leftover_stack:get_count()
+  local pos = self:getLoc()
+  local below = vector.new(pos.x, pos.y - 1, pos.z)
+  local drop_pos = minetest.find_node_near(below, 1, {"air"}) or below
+  for _ = 1, amount do
+    minetest.add_item(drop_pos, item_name)
+  end
+end
+
 -- craft using top left 3x3 grid
 -- defaults to single item
 -- puts output into selected square, or otherwise
@@ -1524,17 +1579,7 @@ function TurtleEntity:craft(times)
     end
     -- Put output in output slot
     local leftover_stack = self:add_item_to_slots(output.item, outputSlots)
-    if leftover_stack:get_count() > 0 then
-      -- drop items into world
-      item_name = leftover_stack:to_table().name
-      amount = leftover_stack:get_count()
-      local pos = self:getLoc()
-      local below = vector.new(pos.x, pos.y - 1, pos.z)
-      local drop_pos = minetest.find_node_near(below, 1, {"air"}) or below
-      for item_count = 1, amount do
-        minetest.add_item(drop_pos, item_name)
-      end
-    end
+    self:drop_items_in_world(leftover_stack)
   end
   return true
 end
