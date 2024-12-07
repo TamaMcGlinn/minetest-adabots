@@ -462,10 +462,28 @@ function TurtleEntity:pickup(stack)
   end
 end
 
-function TurtleEntity:build(nodeLocation)
-  if node_walkable(nodeLocation) then return false end
+function TurtleEntity:is_player()
+  return false
+end
 
-  -- Build and consume item
+function TurtleEntity:get_player_name()
+  return self.name
+end
+
+function TurtleEntity:get_player_control()
+  return {["sneak"]=false}
+end
+
+local function get_decoration_from_item(item_name)
+  for _, decoration in pairs(minetest.registered_decorations) do
+    if decoration["decoration"] == item_name then
+      return decoration
+    end
+  end
+  return nil
+end
+
+function TurtleEntity:build(nodeLocation)
   local stack = self:getTurtleslot(self.selected_slot)
   if stack == nil then
     return false
@@ -473,16 +491,24 @@ function TurtleEntity:build(nodeLocation)
   if stack:is_empty() then return false end
   local item_name = stack:get_name()
   local item_registration = minetest.registered_items[item_name]
-  local newstack = item_registration.on_place(stack, nil, {
+  -- minetest.log("item_name: " .. item_name)
+  -- minetest.registered_decorations["default:kelp"]
+  local decoration = get_decoration_from_item(item_name)
+  if decoration ~= nil then
+    nodeLocation = {
+      ["x"] = nodeLocation.x,
+      ["y"] = nodeLocation.y + decoration["place_offset_y"],
+      ["z"] = nodeLocation.z
+    }
+  end
+  local newstack = item_registration.on_place(stack, self, {
     type = "node",
     under = nodeLocation,
-    above = self:getLoc()
+    above = nodeLocation
   })
   if newstack == nil then
-    minetest.log("itemstack not modified")
     return false
   end
-
   self.inv:set_stack("main", self.selected_slot, newstack)
   return true
 end
