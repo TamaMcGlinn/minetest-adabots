@@ -33,6 +33,10 @@ local supported_tools = {
   "default:pick_gold", "default:pick_diamond"
 }
 
+local furnace_node_types = {
+  ["default:furnace"] = true, ["default:furnace_active"] = true
+}
+
 -- returns the wear for one use,
 -- such that the given number of uses will break the tool
 function get_wear_for_uses(uses) return 65535 / (uses - 1) end
@@ -436,7 +440,6 @@ function TurtleEntity:mine(nodeLocation)
       if num_buckets > 1 then
         current_buckets:set_count(num_buckets - 1)
         local leftover_stack = self:add_item(current_buckets)
-        minetest.log("leftover stack: " .. dump(leftover_stack))
         self:drop_items_in_world(leftover_stack)
       end
       return true
@@ -491,8 +494,6 @@ function TurtleEntity:build(nodeLocation)
   if stack:is_empty() then return false end
   local item_name = stack:get_name()
   local item_registration = minetest.registered_items[item_name]
-  -- minetest.log("item_name: " .. item_name)
-  -- minetest.registered_decorations["default:kelp"]
   local decoration = get_decoration_from_item(item_name)
   if decoration ~= nil then
     nodeLocation = {
@@ -574,7 +575,8 @@ function TurtleEntity:add_item_to_slots(stack, slots)
   return leftover_stack
 end
 
--- Get items, either those loose in the world, or in an inventory
+-- Get items from an inventory (e.g. chest / furnace)
+-- or loose in the world if there's no inventory
 -- at the nodeLocation given. As many items as possible are retrieved,
 -- up to the amount specified.
 -- Pass 1 iteratively for more precision, or pass 0 to retrieve infinite items.
@@ -584,49 +586,83 @@ end
 -- Returns true if any items were retrieved
 -- Returns false only if unable to get any items
 function TurtleEntity:sucknode(nodeLocation, maxAmount)
-  if self:gather_items(nodeLocation, maxAmount) then return true end
+  local inventory = minetest.get_inventory({type = "node", pos = nodeLocation})
+  if inventory ~= nil then return self:suck_from_inventory_at(nodeLocation, maxAmount) end
+  return self:gather_items(nodeLocation, maxAmount)
+end
 
-  local chest = minetest.get_inventory({type = "node", pos = nodeLocation})
-  if chest == nil then return false end
+-- returns list of inventories to suck from that node
+-- the list is ordered, so that the turtle will only suck
+-- from the next inventory in the list when the previous ones
+-- came up empty.
+function TurtleEntity:get_inventories_to_suck_from(nodeLocation)
+  local node = minetest.get_node(nodeLocation)
+  if furnace_node_types[node.name] ~= nil then
+    return {"dst", "src", "fuel"}
+  end
+  return {"main"}
+end
 
-  local chest_listname = "main"
-  local chestsize = chest:get_size(chest_listname)
+-- see sucknode for behaviour
+-- only difference is that this function will not pick up loose items in the world
+-- but only suck from the inventory at that location
+function TurtleEntity:suck_from_inventory_at(nodeLocation, maxAmount)
+  local inventory = minetest.get_inventory({type = "node", pos = nodeLocation})
+  if inventory == nil then return false end
+
+  local inventory_lists = self:get_inventories_to_suck_from(nodeLocation)
+  for _, inventory_listname in ipairs(inventory_lists) do
+    if self:suck_from_inventory_list_at(inventory, maxAmount, inventory_listname) then
+      return true
+    end
+  end
+  return false
+end
+
+-- take items from the list in the inventory specified
+-- return whether we were able to grab any items from that list
+function TurtleEntity:suck_from_inventory_list_at(inventory, maxAmount, inventory_listname)
+  local inventorysize = inventory:get_size(inventory_listname)
 
   local remaining_items = maxAmount -- can't directly modify maxAmount because 0 means 'take infinite'
   local picked_up_items = 0
-  for i = 1, chestsize do
-    local chest_stack = chest:get_stack(chest_listname, i)
-    if chest_stack == nil then
+  for i = 1, inventorysize do
+    local inventory_stack = inventory:get_stack(inventory_listname, i)
+    if inventory_stack == nil then
       minetest.debug("unexpected error in sucknode: stack is nil")
       return false
     end
 
-    local stack_count = chest_stack:get_count()
-
-    -- do you want the whole stack?
-    if maxAmount == 0 or stack_count <= remaining_items then
-      remaining_stack = self:add_item(chest_stack)
-      local remaining_count = remaining_stack:get_count()
-      local picked_up_this_iteration = stack_count - remaining_count
-      picked_up_items = picked_up_items + picked_up_this_iteration
-      chest:set_stack(chest_listname, i, remaining_stack)
-      remaining_items = remaining_items - picked_up_this_iteration
-    else
-      local remaining_count = stack_count - remaining_items
-      local stack_to_add = chest_stack
-      stack_to_add:set_count(remaining_items)
-      local leftover_stack = self:add_item(stack_to_add)
-      -- leftover_itemcount is normally 0, otherwise it means we couldn't fit the desired amount from this inventory stack
-      local leftover_itemcount = leftover_stack:get_count()
-      local picked_up_this_iteration = remaining_count -
-      leftover_itemcount
-      picked_up_items = picked_up_items + picked_up_this_iteration
-      local remaining_stack = chest_stack
-      remaining_stack:set_count(remaining_count + leftover_itemcount)
-      chest:set_stack(chest_listname, i, remaining_stack)
-      remaining_items = remaining_items - picked_up_this_iteration
+    local stack_count = inventory_stack:get_count()
+    if stack_count > 0 then
+      -- do you want the whole stack?
+      if maxAmount == 0 or stack_count <= remaining_items then
+        local remaining_stack = self:add_item(inventory_stack)
+        local remaining_count = remaining_stack:get_count()
+        local picked_up_this_iteration = stack_count - remaining_count
+        picked_up_items = picked_up_items + picked_up_this_iteration
+        inventory:set_stack(inventory_listname, i, remaining_stack)
+        remaining_items = remaining_items - picked_up_this_iteration
+      else
+        local remaining_count = stack_count - remaining_items
+        local stack_to_add = inventory_stack
+        stack_to_add:set_count(remaining_items)
+        local leftover_stack = self:add_item(stack_to_add)
+        -- leftover_itemcount is normally 0, otherwise it means we couldn't fit the desired amount from this inventory stack
+        local leftover_itemcount = leftover_stack:get_count()
+        local picked_up_this_iteration = remaining_count -
+        leftover_itemcount
+        picked_up_items = picked_up_items + picked_up_this_iteration
+        local remaining_stack = inventory_stack
+        remaining_stack:set_count(remaining_count + leftover_itemcount)
+        inventory:set_stack(inventory_listname, i, remaining_stack)
+        remaining_items = remaining_items - picked_up_this_iteration
+      end
+      -- if we asked for a specific amount and that amount has been met, return true
+      if maxAmount ~= 0 and remaining_items == 0 then return true end
+      -- if we asked for any amount and we have picked up anything (as much as fit from 1 stack), return true
+      if maxAmount == 0 and picked_up_items > 0 then return true end
     end
-    if remaining_items == 0 then return true end
   end
 
   return picked_up_items > 0
@@ -636,13 +672,28 @@ function TurtleEntity:detectnode(nodeLocation)
   return node_walkable(nodeLocation)
 end
 
+function TurtleEntity:get_inv_to_drop_into(item_name, node_name)
+  if furnace_node_types[node_name] ~= nil then
+    local item = minetest.registered_items[item_name]
+    if item["groups"]["flammable"] ~= nil then
+      return "fuel"
+    end
+    return "src"
+  end
+  return "main"
+end
+
 function TurtleEntity:itemDrop(nodeLocation, amount)
   local stack = self:getTurtleslot(self.selected_slot)
+  if stack == nil then
+    minetest.log("error", "turtleslot " .. self.selected_slot .. " has nil stack")
+    return false
+  end
   if stack:is_empty() then return false end
   if stack:get_count() < amount then amount = stack:get_count() end
 
   -- adjust inventory stack
-  new_amount = stack:get_count() - amount
+  local new_amount = stack:get_count() - amount
   if new_amount > 0 then
     stack:set_count(new_amount)
     self.inv:set_stack("main", self.selected_slot, stack)
@@ -651,13 +702,15 @@ function TurtleEntity:itemDrop(nodeLocation, amount)
   end
 
   -- dump items
-  item_name = stack:to_table().name
-  -- check for chest
-  local chest = minetest.get_inventory({type = "node", pos = nodeLocation})
-  if chest then
-    local chest_stack = ItemStack(item_name)
-    chest_stack:set_count(amount)
-    local remainingItemStack = chest:add_item("main", chest_stack)
+  local item_name = stack:to_table().name
+  -- check for inventory
+  local inventory = minetest.get_inventory({type = "node", pos = nodeLocation})
+  if inventory then
+    local node_name = minetest.get_node(nodeLocation)["name"]
+    local inv_stack = ItemStack(item_name)
+    inv_stack:set_count(amount)
+    local inventory_id = self:get_inv_to_drop_into(item_name, node_name)
+    local remainingItemStack = inventory:add_item(inventory_id, inv_stack)
     amount = remainingItemStack:get_count()
   end
   if amount > 0 then
@@ -1094,14 +1147,21 @@ end
 function TurtleEntity:on_deactivate() self:remove_pickaxe() end
 
 function TurtleEntity:on_step(dtime)
-  self:sucknode(self:getLoc(), 0)
+  -- init to 0
   if not self.wait_since_last_step then self.wait_since_last_step = 0 end
-  if self.is_listening then
-    self.wait_since_last_step = self.wait_since_last_step + dtime
-    if self.wait_since_last_step >= adabots.config.turtle_tick then
+
+  -- increment
+  self.wait_since_last_step = self.wait_since_last_step + dtime
+
+  -- periodically...
+  if self.wait_since_last_step >= adabots.config.turtle_tick then
+    -- suck
+    self:sucknode(self:getLoc(), 0)
+    -- and maybe listen
+    if self.is_listening then
       self:fetch_adabots_instruction()
-      self.wait_since_last_step = 0
     end
+    self.wait_since_last_step = 0
   end
 end
 
@@ -1298,14 +1358,14 @@ function TurtleEntity:inspect() return self:inspectnode(self:getLocForward()) en
 function TurtleEntity:inspectUp() return self:inspectnode(self:getLocUp()) end
 function TurtleEntity:inspectDown() return self:inspectnode(self:getLocDown()) end
 
-function TurtleEntity:suck(slot_number)
-  return self:sucknode(self:getLocForward(), slot_number)
+function TurtleEntity:suck(max_amount)
+  return self:sucknode(self:getLocForward(), max_amount)
 end
-function TurtleEntity:suckUp(slot_number)
-  return self:sucknode(self:getLocUp(), slot_number)
+function TurtleEntity:suckUp(max_amount)
+  return self:sucknode(self:getLocUp(), max_amount)
 end
-function TurtleEntity:suckDown(slot_number)
-  return self:sucknode(self:getLocDown(), slot_number)
+function TurtleEntity:suckDown(max_amount)
+  return self:sucknode(self:getLocDown(), max_amount)
 end
 
 function TurtleEntity:drop(amount)
