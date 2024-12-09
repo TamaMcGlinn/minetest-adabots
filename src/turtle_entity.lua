@@ -203,6 +203,8 @@ minetest.register_on_player_receive_fields(
         turtle:open_slotselect(player_name)
       end
       if fields.craft then turtle:craft(1) end
+      if fields.suck then turtle:suck(0) end
+      if fields.drop then turtle:drop(0) end
       if fields.listen then
         turtle:toggle_is_listening()
         refresh(turtleform)
@@ -683,6 +685,28 @@ function TurtleEntity:get_inv_to_drop_into(item_name, node_name)
   return "main"
 end
 
+function TurtleEntity:drop_into_inventory(nodeLocation, inventory, item_name, drop_amount)
+  local node = minetest.get_node(nodeLocation)
+  local node_name = node["name"]
+  local inv_stack = ItemStack(item_name)
+  inv_stack:set_count(drop_amount)
+  local inventory_id = self:get_inv_to_drop_into(item_name, node_name)
+  local remainingItemStack = inventory:add_item(inventory_id, inv_stack)
+  -- start timer for the furnace to check if it should turn on
+  minetest.get_node_timer(nodeLocation):start(1.0)
+  return remainingItemStack
+end
+
+function TurtleEntity:drop_into_world(nodeLocation, item_name, amount)
+  if amount <= 0 then
+    return
+  end
+  -- add items to world
+  for _ = 1, amount do
+    minetest.add_item(nodeLocation, item_name)
+  end
+end
+
 function TurtleEntity:itemDrop(nodeLocation, amount)
   local stack = self:getTurtleslot(self.selected_slot)
   if stack == nil then
@@ -690,35 +714,24 @@ function TurtleEntity:itemDrop(nodeLocation, amount)
     return false
   end
   if stack:is_empty() then return false end
-  if stack:get_count() < amount then amount = stack:get_count() end
-
-  -- adjust inventory stack
-  local new_amount = stack:get_count() - amount
-  if new_amount > 0 then
-    stack:set_count(new_amount)
-    self.inv:set_stack("main", self.selected_slot, stack)
-  else
-    self.inv:set_stack("main", self.selected_slot, ItemStack(""))
+  local drop_amount = amount
+  if amount == 0 or stack:get_count() < amount then
+    drop_amount = stack:get_count()
   end
 
   -- dump items
   local item_name = stack:to_table().name
   -- check for inventory
   local inventory = minetest.get_inventory({type = "node", pos = nodeLocation})
+  local remainingStack = nil
   if inventory then
-    local node_name = minetest.get_node(nodeLocation)["name"]
-    local inv_stack = ItemStack(item_name)
-    inv_stack:set_count(amount)
-    local inventory_id = self:get_inv_to_drop_into(item_name, node_name)
-    local remainingItemStack = inventory:add_item(inventory_id, inv_stack)
-    amount = remainingItemStack:get_count()
+    remainingStack = self:drop_into_inventory(nodeLocation, inventory, item_name, drop_amount)
+  else
+    -- dropping into world always drops everything
+    self:drop_into_world(nodeLocation, item_name, drop_amount)
+    remainingStack = ItemStack("")
   end
-  if amount > 0 then
-    -- add items to world
-    for _ = 1, amount do
-      minetest.add_item(nodeLocation, item_name)
-    end
-  end
+  self.inv:set_stack("main", self.selected_slot, remainingStack)
   return true
 end
 
@@ -967,6 +980,14 @@ function TurtleEntity:get_formspec_controlpanel()
       ['name'] = 'craft',
       ['offset'] = {['x'] = 5, ['y'] = 1},
       ['tooltip'] = craft_tooltip
+    }, {
+      ['name'] = 'suck',
+      ['offset'] = {['x'] = 5, ['y'] = 2},
+      ['tooltip'] = 'Suck'
+    }, {
+      ['name'] = 'drop',
+      ['offset'] = {['x'] = 5, ['y'] = 3},
+      ['tooltip'] = 'Drop'
     }
   }
 
