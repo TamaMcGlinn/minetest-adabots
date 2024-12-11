@@ -1177,7 +1177,7 @@ function TurtleEntity:on_step(dtime)
   -- periodically...
   if self.wait_since_last_step >= adabots.config.turtle_tick then
     -- suck
-    self:sucknode(self:getLoc(), 0)
+    self:sucknode(self:get_pos(), 0)
     -- and maybe listen
     if self.is_listening then
       self:fetch_adabots_instruction()
@@ -1291,9 +1291,10 @@ function TurtleEntity:get_staticdata()
   })
 end
 -- MAIN PLAYER INTERFACE (CALL THESE)------------------------------------------
-function TurtleEntity:getLoc() return self.object:get_pos() end
+function TurtleEntity:get_pos() return self.object:get_pos() end
+
 function TurtleEntity:getLocRelative(numForward, numUp, numRight)
-  local pos = self:getLoc()
+  local pos = self:get_pos()
   if pos == nil then
     return nil -- To prevent unloaded turtles from trying to load things
   end
@@ -1646,7 +1647,7 @@ function TurtleEntity:drop_items_in_world(leftover_stack)
   -- drop items into world
   local item_name = leftover_stack:to_table().name
   local amount = leftover_stack:get_count()
-  local pos = self:getLoc()
+  local pos = self:get_pos()
   local below = vector.new(pos.x, pos.y - 1, pos.z)
   local drop_pos = minetest.find_node_near(below, 1, {"air"}) or below
   for _ = 1, amount do
@@ -1708,7 +1709,7 @@ function TurtleEntity:itemRefuel(turtleslot)
   if replacements[1] then
     local leftover = self.inv:add_item("main", replacements[1])
     if not leftover:is_empty() then
-      local pos = self:getLoc()
+      local pos = self:get_pos()
       local above = vector.new(pos.x, pos.y + 1, pos.z)
       local drop_pos = minetest.find_node_near(above, 1, {"air"}) or above
       minetest.item_drop(replacements[1], nil, drop_pos)
