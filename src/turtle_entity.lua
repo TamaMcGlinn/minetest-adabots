@@ -4,7 +4,7 @@ minetest.log("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
 
 local modpath = minetest.get_modpath("adabots")
 local S = minetest.get_translator("adabots")
-local F = minetest.formspec_escape
+local F = function (s) return minetest.formspec_escape(s) end
 
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 local FORMNAME_TURTLE_CONTROLPANEL = "adabots:turtle:controlpanel:"
@@ -39,7 +39,7 @@ local furnace_node_types = {
 
 -- returns the wear for one use,
 -- such that the given number of uses will break the tool
-function get_wear_for_uses(uses) return 65535 / (uses - 1) end
+local function get_wear_for_uses(uses) return 65535 / (uses - 1) end
 
 local tool_usages = {
   ["mcl_tools:pick_wood"] = 60,
@@ -65,7 +65,7 @@ end
 function adabots.map(f, t)
   local t1 = {}
   local next = 1
-  for k, v in ipairs(t) do
+  for _, v in ipairs(t) do
     t1[next] = f(v)
     next = next + 1
   end
@@ -78,15 +78,7 @@ function adabots.get_workspace_names()
   return result
 end
 
-function round(num) return math.floor(num + 0.5) end
-
-function get_remaining_uses(tool_name, wear_value)
-  if not is_supported_toolname(tool_name) then return 0 end
-  local total_uses = tool_usages[tool_name]
-  local single_use = tool_wear_rates[tool_name]
-  local spent_uses = round(wear_value / single_use)
-  return total_uses - spent_uses
-end
+local function round(num) return math.floor(num + 0.5) end
 
 local craftSquares = {1, 2, 3, 5, 6, 7, 9, 10, 11}
 local TURTLE_INVENTORYSIZE = 4 * 4
@@ -163,7 +155,7 @@ minetest.register_on_player_receive_fields(
       return string.sub(formname, 1, string.len(name)) == name
     end
     local turtleform = ""
-    for form_name, form in pairs(turtle_forms) do
+    for form_name, _ in pairs(turtle_forms) do
       if isForm(form_name) then turtleform = form_name end
     end
     local function get_turtle()
@@ -174,8 +166,8 @@ minetest.register_on_player_receive_fields(
     end
     local turtle = get_turtle()
     local player_name = player:get_player_name()
-    local function refresh(turtleform)
-      turtle:open_form(player_name, turtleform)
+    local function refresh(form)
+      turtle:open_form(player_name, form)
     end
     local function respond_to_common_controls()
       if fields.close then
@@ -291,7 +283,7 @@ function dump(o)
   end
 end
 
-function node_walkable(nodeLocation)
+local function node_walkable(nodeLocation)
   if nodeLocation == nil then
     minetest.debug("Error: testing nil node for walkability")
     return false
@@ -302,7 +294,7 @@ function node_walkable(nodeLocation)
   return node_registration.walkable
 end
 
-function player_can_stand_at(pos)
+local function player_can_stand_at(pos)
   local above = vector.new(pos.x, pos.y + 1, pos.z)
   return not node_walkable(pos) and not node_walkable(above)
 end
@@ -353,17 +345,12 @@ function TurtleEntity:move(nodeLocation)
   return true
 end
 
-function contains(list, x)
+local function contains(list, x)
   for _, v in pairs(list) do if v == x then return true end end
   return false
 end
 
-function is_supported_tool(tool_info)
-  local tool_name = tool_info["name"]
-  return is_supported_toolname(tool_name)
-end
-
-function is_supported_toolname(tool_name)
+local function is_supported_toolname(tool_name)
   if not contains(supported_tools, tool_name) then
     minetest.debug("Error: " .. tool_name ..
       " is not a supported Adabots turtle tool")
@@ -372,14 +359,27 @@ function is_supported_toolname(tool_name)
   return true
 end
 
-function get_tool_hardness(tool_info)
+local function get_remaining_uses(tool_name, wear_value)
+  if not is_supported_toolname(tool_name) then return 0 end
+  local total_uses = tool_usages[tool_name]
+  local single_use = tool_wear_rates[tool_name]
+  local spent_uses = round(wear_value / single_use)
+  return total_uses - spent_uses
+end
+
+local function is_supported_tool(tool_info)
+  local tool_name = tool_info["name"]
+  return is_supported_toolname(tool_name)
+end
+
+local function get_tool_hardness(tool_info)
   if not is_supported_tool(tool_info) then return 0 end
   local capabilities = tool_info["tool_capabilities"]
   if capabilities == nil then return 0 end
   return capabilities["max_drop_level"]
 end
 
-function get_node_hardness(node)
+local function get_node_hardness(node)
   local node_name = node.name
   local node_registration = minetest.registered_nodes[node_name]
   local hardness = node_registration["_mcl_hardness"]
@@ -531,7 +531,6 @@ function TurtleEntity:gather_items(nodeLocation, maxAmount)
   local objectlist = minetest.get_objects_inside_radius(nodeLocation, 1)
   for i = 1, #objectlist do
     local object = objectlist[i]
-    local properties = object:get_properties()
     local ent = object:get_luaentity()
     if ent then
       local itemstring = ent.itemstring
@@ -748,24 +747,12 @@ function TurtleEntity:itemPushTurtleslot(nodeLocation, turtleslot, listname)
   end
   -- Try putting my stack somewhere
   local toPush = self:getTurtleslot(turtleslot)
+  if toPush == nil then
+    return false
+  end
   local remainingItemStack = nodeInventory:add_item(listname, toPush)
   self:setTurtleslot(turtleslot, remainingItemStack)
   return remainingItemStack:is_empty()
-end
-
----
----@returns true on success
----
-function TurtleEntity:upload_code_to_turtle(player, code_string, run_for_result)
-  local function sandbox(code)
-    if code == "" then return nil end
-    return loadstring(code)
-  end
-  self.codeUncompiled = code_string
-  self.coroutine = nil
-  self.code = sandbox(self.codeUncompiled)
-  if run_for_result then return "Ran" end
-  return self.code ~= nil
 end
 
 -- MAIN TURTLE USER INTERFACE------------------------------------------
@@ -794,8 +781,6 @@ function TurtleEntity:get_formspec_inventory()
   local playpause_button = "image_button[4,2.2;1,1;" .. playpause_image ..
   ";listen;]tooltip[listen;Start/stop listening]"
 
-  local tool_label =
-  "label[0,3.0;" .. F(minetest.colorize("#313131", "Tool")) .. "]"
   local tool_label =
   "label[0,3.0;" .. F(minetest.colorize("#313131", "Tool")) .. "]"
   local tool_bg = mcl_formspec.get_itemslot_bg(0, 3.4, 1, 1)
@@ -830,10 +815,6 @@ function TurtleEntity:get_formspec_inventory()
   local turtle_inventory_items = "list[" .. self.inv_fullname .. ";main;" ..
   turtle_inv_x .. "," .. turtle_inv_y ..
   ";4,4;]"
-
-  -- local help_button =
-  --   "image_button[4,3.4;1,1;doc_button_icon_lores.png;__mcl_doc;]"..
-  --   "tooltip[__mcl_doc;"..F(S("Help")).."]"
 
   local player_inventory = "label[0,4.5;" ..
   F(
@@ -897,11 +878,6 @@ function TurtleEntity:select_workspace(index)
 end
 
 function TurtleEntity:get_formspec_controlpanel()
-  local listening = self.is_listening
-  local sleeping_image = ""
-  local playpause_image = "pause_btn.png"
-  if not listening then playpause_image = "play_btn.png" end
-
   local general_settings = "formspec_version[4]" .. "size[26,12]" ..
   "no_prepend[]" .. "bgcolor[#00000000]" ..
   "background[0,0;25,12;controlpanel_bg.png]" ..
@@ -1028,14 +1004,13 @@ function TurtleEntity:get_formspec_slotselect()
   0.05 ..
   ";1.1,1.1;mcl_inventory_hotbar_selected.png]"
 
-  slot_tiles = ""
+  local slot_tiles = ""
   for i = 1, TURTLE_INVENTORYSIZE do
     local x = ((i - 1) % 4) + start.x + 1.1
     local y = math.floor((i - 1) / 4) + start.y + 0.1
     local stack = self.inv:get_stack("main", i)
     local stack_tooltip = stack:get_short_description()
     local stack_name = stack:get_name()
-    local images = "empty.png"
     local button = "item_image_button[" .. x .. "," .. y .. ";0.9,0.9;" ..
     stack_name .. ";select_" .. i .. ";]"
     local tooltip =
@@ -1050,7 +1025,7 @@ end
 -- Called when a player wants to put something into the inventory.
 -- Return value: number of items allowed to put.
 -- Return value -1: Allow and don't modify item count in inventory.
-function toolinv_allow_put(inv, listname, index, stack, player)
+local function toolinv_allow_put(inv, listname, index, stack, player)
   if is_supported_toolname(stack:get_name()) then
     return 1
   else
@@ -1067,7 +1042,7 @@ function TurtleEntity:toolinv_on_take(inv, listname, index, stack, player)
 end
 
 -- https://rosettacode.org/wiki/Partial_function_application#Lua
-function partial(f, arg) return function(...) return f(arg, ...) end end
+local function partial(f, arg) return function(...) return f(arg, ...) end end
 
 -- MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
 function TurtleEntity:on_activate(staticdata, dtime_s)
@@ -1141,7 +1116,7 @@ function TurtleEntity:refresh_pickaxe()
   self:add_pickaxe_model()
 end
 
-function get_pickaxe_entity_name(tool_name)
+local function get_pickaxe_entity_name(tool_name)
   -- mcl_tools:pick_wood => adabots:pick_wood
   -- default:pick_wood => adabots:pick_wood
   return tool_name:gsub("^.*:", "adabots:")
@@ -1233,8 +1208,8 @@ local function generate_line(s, ypos)
 
   local texture = ""
   local xpos = math.floor((SIGN_WIDTH - width) / 2)
-  for i = 1, #parsed do
-    texture = texture .. ":" .. xpos .. "," .. ypos .. "=" .. parsed[i] ..
+  for j = 1, #parsed do
+    texture = texture .. ":" .. xpos .. "," .. ypos .. "=" .. parsed[j] ..
     ".png"
     xpos = xpos + printed_char_width
   end
@@ -1251,7 +1226,6 @@ end
 
 function TurtleEntity:update_nametag()
   if not minetest.get_modpath("mcl_signs") then return end
-  local pos = self:getLocRelative(0, 1, 0)
 
   -- remove if we already have one
   if self.text_entity then self.text_entity:remove() end
@@ -1363,6 +1337,9 @@ end
 function TurtleEntity:getSelectedSlot() return self.selected_slot end
 function TurtleEntity:getItemCount(slot_number)
   local stack = self:getTurtleslot(slot_number)
+  if stack == nil then
+    return -1
+  end
   return stack:get_count()
 end
 
@@ -1400,12 +1377,12 @@ function TurtleEntity:dropDown(amount)
   return self:itemDrop(self:getLocDown(), amount)
 end
 
-function get_stack_json(name, count, remaining_uses)
+local function get_stack_json(name, count, remaining_uses)
   return '{"name":"' .. name .. '","remaining_uses":' .. remaining_uses ..
     ',"count":' .. count .. '}'
 end
 
-function get_stack_description(stack)
+local function get_stack_description(stack)
   local nilstack = get_stack_json("", 0, 0)
   if stack == nil then return nilstack end
   local table = stack:to_table()
@@ -1427,7 +1404,9 @@ function TurtleEntity:getCurrentTool()
 end
 
 function TurtleEntity:getItemDetail(slot)
-  local slot = slot or self:getSelectedSlot()
+  if slot == nil then
+    slot = self:getSelectedSlot()
+  end
   if not isValidInventoryIndex(slot) then
     return "error: invalid slot number"
   end
@@ -1537,7 +1516,7 @@ function TurtleEntity:do_instruction(command)
   if not is_command_approved(command) then
     result = "error: unsupported command " .. command
   else
-    local command = command:gsub("^turtle.", "self:")
+    command = command:gsub("^turtle.", "self:")
     local functor = loadstring("return function(self) return " .. command ..
       " end")
     if functor then
@@ -1602,26 +1581,8 @@ function TurtleEntity:itemSwapTurtleslot(turtleslotA, turtleslotB)
   return true
 end
 
-function TurtleEntity:itemSplitTurtleslot(turtleslotSrc, turtleslotDst, amount)
-  if (not isValidInventoryIndex(turtleslotSrc)) or
-    (not isValidInventoryIndex(turtleslotDst)) or
-    (not self:isTurtleslotEmpty(turtleslotDst)) then return false end
-
-  local stackToSplit = self:getTurtleslot(turtleslotSrc)
-
-  amount = math.min(math.floor(tonumber(amount or 1)),
-    stackToSplit:get_count())
-
-  stackToSplit:set_count(stackToSplit:get_count() - amount)
-  self:setTurtleslot(turtleslotSrc, stackToSplit)
-  stackToSplit:set_count(amount)
-  self:setTurtleslot(turtleslotDst, stackToSplit)
-
-  return true
-end
-
 function TurtleEntity:peek_craft_result()
-  local output, decremented_input = minetest.get_craft_result({
+  local output, _ = minetest.get_craft_result({
     method = "normal",
     width = 3,
     items = {
@@ -1661,8 +1622,8 @@ end
 -- any non-craft-grid square that is free, or otherwise
 -- drops it into the world
 function TurtleEntity:craft(times)
-  craft_amount = times or 1
-  for i = 1, craft_amount, 1 do
+  local craft_amount = times or 1
+  for _ = 1, craft_amount, 1 do
     local outputSlots = {4, 8, 12, 13, 14, 15, 16}
     local output, decremented_input =
     minetest.get_craft_result({
@@ -1745,10 +1706,11 @@ end
 function TurtleEntity:setAutoRefuel(autoRefuel)
   self.autoRefuel = not not autoRefuel
 end
+
 function TurtleEntity:autoRefuel()
   for turtleslot = 1, 16 do
-    if turtle:getFuel() > 100 then return true end
-    turtle:itemRefuel(turtleslot)
+    if self:getFuel() > 100 then return true end
+    self:itemRefuel(turtleslot)
   end
   return false
 end
@@ -1808,7 +1770,7 @@ local PickaxeEntity = {
   }
 }
 
-function set_pickaxe_properties(texture)
+local function set_pickaxe_properties(texture)
   local entity = deepcopy(PickaxeEntity)
   entity["initial_properties"]["textures"] = {texture}
   return entity
