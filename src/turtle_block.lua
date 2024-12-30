@@ -16,8 +16,7 @@ minetest.register_node("adabots:turtle", {
     end
   end,
   on_construct = function(pos)
-    local turtle = minetest.add_entity(pos, "adabots:turtle")
-    turtle = turtle:get_luaentity()
+    minetest.add_entity(pos, "adabots:turtle")
     minetest.remove_node(pos)
   end
 })
