@@ -1227,10 +1227,21 @@ function TurtleEntity:on_step(dtime)
   end
 end
 
+function TurtleEntity:player_allowed_to_control_bot(player_name)
+  if player_name == self.owner then
+    return true
+  end
+  if minetest.check_player_privs(player_name, {adabots_override_bot_lock=true}) then
+    return true
+  end
+  -- TODO check allowlist of playernames
+  return false
+end
+
 function TurtleEntity:on_rightclick(clicker)
   if not clicker or not clicker:is_player() then return end
   local player_name = clicker:get_player_name()
-  if player_name == self.owner then
+  if self:player_allowed_to_control_bot(player_name) then
     self:open_inventory(player_name)
   else
     self:open_form(player_name, FORMNAME_TURTLE_NOTYOURBOT)
@@ -1243,7 +1254,7 @@ function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities,
     return true -- returning true ensures the bot doesn't disappear when it gets to 0 hp. It should stop damage entirely according to lua_api.txt
   end
   local player_name = puncher:get_player_name()
-  if player_name == self.owner then
+  if self:player_allowed_to_control_bot(player_name) then
     self:open_controlpanel(player_name)
   else
     self:open_form(player_name, FORMNAME_TURTLE_NOTYOURBOT)
@@ -1867,3 +1878,7 @@ register_or_override_entity("adabots:pick_mese",
 register_or_override_entity("adabots:pick_diamond",
   set_pickaxe_properties("pick_diamond.png"))
 
+minetest.register_privilege("adabots_override_bot_lock", {
+  description = "Can access other player's bots without their permission.",
+  give_to_singleplayer = true
+})
