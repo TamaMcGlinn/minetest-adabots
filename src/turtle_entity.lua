@@ -9,6 +9,7 @@ local F = function (s) return minetest.formspec_escape(s) end
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 local FORMNAME_TURTLE_CONTROLPANEL = "adabots:turtle:controlpanel:"
 local FORMNAME_TURTLE_SLOTSELECT = "adabots:turtle:slotselect:"
+local FORMNAME_TURTLE_NOTYOURBOT = "adabots:turtle:notyourbot:"
 local turtle_forms = {
   [FORMNAME_TURTLE_INVENTORY] = {
     ["formspec_function"] = function(turtle)
@@ -23,6 +24,11 @@ local turtle_forms = {
   [FORMNAME_TURTLE_SLOTSELECT] = {
     ["formspec_function"] = function(turtle)
       return turtle:get_formspec_slotselect()
+    end
+  },
+  [FORMNAME_TURTLE_NOTYOURBOT] = {
+    ["formspec_function"] = function(turtle)
+      return turtle:get_formspec_notyourbot()
     end
   }
 }
@@ -1057,6 +1063,20 @@ function TurtleEntity:get_formspec_slotselect()
   return general_settings .. buttons .. slot_tiles .. turtle_selection
 end
 
+function TurtleEntity:get_formspec_notyourbot()
+  local general_settings = "size[9,9.25]" .. "options[key_event=true]" ..
+  "background[-0.19,-0.25;9.41,9.49;turtle_inventory_bg.png]"
+  local owner_name = self.owner
+  if owner_name == nil then
+    owner_name = "nil"
+    minetest.log("error", "[adabots] : opening formspec for nil owner bot")
+  end
+  local not_your_bot = "label[0,1.0;" .. F(minetest.colorize("#FFFFFF", "You can only control your own Bots.")) .. "]"
+  local belongs_to = "label[0,3.0;" .. F(minetest.colorize("#FFFFFF", "This bot belongs to " .. owner_name)) .. "]"
+  -- TODO show recipe for making your own bot here
+  return general_settings .. not_your_bot .. belongs_to
+end
+
 -- Called when a player wants to put something into the inventory.
 -- Return value: number of items allowed to put.
 -- Return value -1: Allow and don't modify item count in inventory.
@@ -1197,7 +1217,12 @@ end
 
 function TurtleEntity:on_rightclick(clicker)
   if not clicker or not clicker:is_player() then return end
-  self:open_inventory(clicker:get_player_name())
+  local player_name = clicker:get_player_name()
+  if player_name == self.owner then
+    self:open_inventory(player_name)
+  else
+    self:open_form(player_name, FORMNAME_TURTLE_NOTYOURBOT)
+  end
 end
 
 function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities, direction, damage)
@@ -1205,7 +1230,12 @@ function TurtleEntity:on_punch(puncher, time_from_last_punch, tool_capabilities,
     minetest.log("warning", "[adabots] : Non-player punched bot; this does nothing")
     return true -- returning true ensures the bot doesn't disappear when it gets to 0 hp. It should stop damage entirely according to lua_api.txt
   end
-  self:open_controlpanel(puncher:get_player_name())
+  local player_name = puncher:get_player_name()
+  if player_name == self.owner then
+    self:open_controlpanel(player_name)
+  else
+    self:open_form(player_name, FORMNAME_TURTLE_NOTYOURBOT)
+  end
   return true
 end
 
