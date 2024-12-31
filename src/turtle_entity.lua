@@ -284,6 +284,21 @@ function dump(o)
   end
 end
 
+-- checks if the location is blocked by any objects
+local function is_location_blocked_by_objects(nodeLocation)
+  local objectsthere = minetest.get_objects_inside_radius(nodeLocation, 0.85)
+  for _, object in ipairs(objectsthere) do
+    local props = object:get_properties()
+    if props ~= nil and props.collide_with_objects then
+      return true
+    end
+  end
+  return false
+end
+
+-- "walkable" actually means the player could stand on TOP of the node
+-- and not fall. So if it return true, that means the bot cannot move
+-- into that node.
 local function node_walkable(nodeLocation)
   if nodeLocation == nil then
     minetest.debug("Error: testing nil node for walkability")
@@ -292,7 +307,15 @@ local function node_walkable(nodeLocation)
   local node = minetest.get_node(nodeLocation)
   local node_name = node.name
   local node_registration = minetest.registered_nodes[node_name]
-  return node_registration.walkable
+  if node_registration.walkable then
+    -- solid block the player could walk ON,
+    -- the bot cannot enter it
+    return true
+  end
+  if is_location_blocked_by_objects(nodeLocation) then
+    return true
+  end
+  return false
 end
 
 local function player_can_stand_at(pos)
@@ -326,6 +349,9 @@ function TurtleEntity:move(nodeLocation)
   -- Push player if present
   local below = vector.new(nodeLocation.x, nodeLocation.y - 1.0,
     nodeLocation.z)
+  -- TODO make this more robustly push the player the right way
+  -- so that you can't drop through when it is carrying you up,
+  -- and so it always takes you along when you are on top of it
   local objectsthere = minetest.get_objects_inside_radius(nodeLocation, 0.85)
   local objectsbelow = minetest.get_objects_inside_radius(below, 0.85)
   local objectlist = Union(objectsthere, objectsbelow)
@@ -1062,7 +1088,6 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
   self.fuel = data.fuel or adabots.config.fuel_initial
   self.selected_slot = data.selected_slot or 1
   self.autoRefuel = data.autoRefuel or true
-  self.codeUncompiled = data.codeUncompiled or ""
 
   -- Create inventory
   self.inv_name = "adabots:turtle:" .. self.id
@@ -1261,7 +1286,6 @@ function TurtleEntity:get_staticdata()
     autoRefuel = self.autoRefuel,
     inv = serializeInventory(self.inv),
     toolinv = serializeInventory(self.toolinv),
-    codeUncompiled = self.codeUncompiled,
     complete = true
   })
 end
