@@ -1,5 +1,5 @@
 -- The turtle block is only used when holding a turtle as a block in your hand
--- and immediately after placement, to spawn the turtle entity, then it deletes itself
+-- on placement it spawns a turtle entity
 minetest.register_node("adabots:turtle", {
   description = "Turtle",
 
@@ -9,15 +9,20 @@ minetest.register_node("adabots:turtle", {
   },
 
   paramtype2 = "facedir",
-  after_place_node = function(pos, placer)
-    if placer and placer:is_player() then
-      local meta = minetest.get_meta(pos)
-      meta:set_string("owner", placer:get_player_name())
+  on_place = function(itemstack, placer, pointed_thing)
+    local pos = pointed_thing.above
+    if pos == nil then
+      return itemstack
     end
-  end,
-  on_construct = function(pos)
+    if minetest.is_protected(pos, placer:get_player_name()) then
+      return itemstack
+    end
     minetest.add_entity(pos, "adabots:turtle")
-    minetest.remove_node(pos)
+    if not (creative and creative.is_enabled_for
+      and creative.is_enabled_for(placer:get_player_name())) then
+      itemstack:take_item()
+    end
+    return itemstack
   end
 })
 
