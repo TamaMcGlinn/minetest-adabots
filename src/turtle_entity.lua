@@ -230,6 +230,10 @@ minetest.register_on_player_receive_fields(
       end
       respond_to_common_controls()
       return true
+    elseif isForm(FORMNAME_TURTLE_NOTYOURBOT) then
+      if fields.ok_button then
+        minetest.close_formspec(player_name, formname)
+      end
     else
       return false -- Unknown formname, input not processed
     end
@@ -1071,10 +1075,18 @@ function TurtleEntity:get_formspec_notyourbot()
     owner_name = "nil"
     minetest.log("error", "[adabots] : opening formspec for nil owner bot")
   end
-  local not_your_bot = "label[0,1.0;" .. F(minetest.colorize("#FFFFFF", "You can only control your own Bots.")) .. "]"
-  local belongs_to = "label[0,3.0;" .. F(minetest.colorize("#FFFFFF", "This bot belongs to " .. owner_name)) .. "]"
-  -- TODO show recipe for making your own bot here
-  return general_settings .. not_your_bot .. belongs_to
+  local style = "style_type[label;font=bold]"
+  local locked = "label[3.5,1.0;" .. F(minetest.colorize("#FF0000", "LOCKED")) .. "]"
+  local unstyle = "style_type[label;font=]"
+  local lock_image = "image[3.6,0.6;1.25,1;lock.png;false]"
+  local not_your_bot = "label[2.0,1.5;You cannot control this bot.]"
+  local belongs_to = "label[2.0,2.0;This bot belongs to " .. owner_name .. ".]"
+  local ask_access = "label[2.0,2.5;You can ask " .. owner_name .. " to grant you access]"
+  local craft_own = "label[2.0,3.0;or you can craft your own:]"
+  local craft_recipe = "image[1.0,3.8;8.5,5;turtle_craft_recipe.png;false]"
+  local ok_button = "button[3.0,8.5;3,0.6;ok_button;OK]"
+  return general_settings .. style .. locked .. unstyle .. lock_image ..
+    not_your_bot .. belongs_to .. ask_access .. craft_own .. craft_recipe .. ok_button
 end
 
 -- Called when a player wants to put something into the inventory.
