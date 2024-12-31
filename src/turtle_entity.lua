@@ -819,15 +819,13 @@ function TurtleEntity:get_formspec_inventory()
   "image[0,0;2,2;turtle_icon.png]" .. sleeping_image
 
   local turtle_name = "style_type[field;font_size=26]" ..
-  "field[2.0,0.8;3,1;name;" ..
-  F(minetest.colorize("#313131", "AdaBot name")) ..
-  ";" .. F(self.name) .. "]"
+  "field[2.03,0.8;3,1;name;AdaBot name;" .. F(self.name) .. "]"
 
   local playpause_button = "image_button[4,2.2;1,1;" .. playpause_image ..
   ";listen;]tooltip[listen;Start/stop listening]"
 
   local tool_label =
-  "label[0,3.0;" .. F(minetest.colorize("#313131", "Tool")) .. "]"
+  "label[0,2.95;Tool]"
   local tool_bg = mcl_formspec.get_itemslot_bg(0, 3.4, 1, 1)
   local tool_inventory_slot = "list[" .. self.toolinv_fullname ..
   ";toolmain;0,3.4;1,1;]"
@@ -837,19 +835,13 @@ function TurtleEntity:get_formspec_inventory()
   "tooltip[open_controlpanel;Open controlpanel]"
 
   local connection_settings = "style_type[field;font_size=16]" ..
-  "label[0.4,1.8;" ..
-  F(minetest.colorize("#313131", "Workspace:")) ..
-  "]" .. "dropdown[0,2.2;4.0;workspace;" ..
+  "label[0.3,1.74;Workspace]" .. "dropdown[0,2.2;4.0;workspace;" ..
   table.concat(adabots.get_workspace_names(),
     ",") .. ";" ..
   self:get_workspace_index() .. ";true]"
 
   local turtle_inventory = "label[" .. turtle_inv_x .. "," .. turtle_inv_y -
-  0.55 .. ";" ..
-  F(
-    minetest.colorize("#313131", "AdaBot " ..
-      S("Inventory"))) ..
-  "]" ..
+  0.55 .. ";AdaBot Inventory]" ..
   mcl_formspec.get_itemslot_bg(turtle_inv_x,
     turtle_inv_y, 4, 4)
 
@@ -861,11 +853,7 @@ function TurtleEntity:get_formspec_inventory()
   turtle_inv_x .. "," .. turtle_inv_y ..
   ";4,4;]"
 
-  local player_inventory = "label[0,4.5;" ..
-  F(
-    minetest.colorize("#313131", "Player " ..
-      S("Inventory"))) ..
-  "]" ..
+  local player_inventory = "label[0,4.5;Player Inventory]" ..
   mcl_formspec.get_itemslot_bg(0, 5.0, 9, 3) ..
   mcl_formspec.get_itemslot_bg(0, 8.24, 9, 1)
 
