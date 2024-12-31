@@ -30,7 +30,7 @@ local supported_tools = {
   "mcl_tools:pick_wood", "mcl_tools:pick_stone", "mcl_tools:pick_iron",
   "mcl_tools:pick_gold", "mcl_tools:pick_diamond",
   "default:pick_wood", "default:pick_stone", "default:pick_iron",
-  "default:pick_gold", "default:pick_diamond"
+  "default:pick_bronze", "default:pick_mese", "default:pick_diamond"
 }
 
 local furnace_node_types = {
@@ -42,16 +42,17 @@ local furnace_node_types = {
 local function get_wear_for_uses(uses) return 65535 / (uses - 1) end
 
 local tool_usages = {
-  ["mcl_tools:pick_wood"] = 60,
-  ["mcl_tools:pick_stone"] = 132,
-  ["mcl_tools:pick_iron"] = 251,
-  ["mcl_tools:pick_gold"] = 33,
-  ["mcl_tools:pick_diamond"] = 1562,
-  ["default:pick_wood"] = 60,
-  ["default:pick_stone"] = 132,
-  ["default:pick_iron"] = 251,
-  ["default:pick_gold"] = 33,
-  ["default:pick_diamond"] = 1562
+  ["mcl_tools:pick_wood"] = 30,
+  ["mcl_tools:pick_stone"] = 60,
+  ["mcl_tools:pick_iron"] = 180,
+  ["mcl_tools:pick_gold"] = 20,
+  ["mcl_tools:pick_diamond"] = 810,
+  ["default:pick_wood"] = 30,
+  ["default:pick_stone"] = 60,
+  ["default:pick_iron"] = 180,
+  ["default:pick_bronze"] = 180,
+  ["default:pick_mese"] = 540,
+  ["default:pick_diamond"] = 810
 }
 local tool_wear_rates = {}
 for i = 1, #supported_tools do
@@ -1782,8 +1783,12 @@ register_or_override_entity("adabots:pick_stone",
   set_pickaxe_properties("pick_stone.png"))
 register_or_override_entity("adabots:pick_iron",
   set_pickaxe_properties("pick_iron.png"))
+register_or_override_entity("adabots:pick_bronze",
+  set_pickaxe_properties("pick_bronze.png"))
 register_or_override_entity("adabots:pick_gold",
   set_pickaxe_properties("pick_gold.png"))
+register_or_override_entity("adabots:pick_mese",
+  set_pickaxe_properties("pick_mese.png"))
 register_or_override_entity("adabots:pick_diamond",
   set_pickaxe_properties("pick_diamond.png"))
 
