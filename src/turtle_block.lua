@@ -14,10 +14,23 @@ minetest.register_node("adabots:turtle", {
     if pos == nil then
       return itemstack
     end
-    if minetest.is_protected(pos, placer:get_player_name()) then
+    local owner = nil
+    if placer:is_player() then
+      owner = placer:get_player_name()
+    elseif placer.is_adabots_turtle and placer.is_adabots_turtle() then
+      owner = placer:get_owner()
+    else
+      minetest.log("error", "[adabots] unable to determine owner when placing bot!")
       return itemstack
     end
-    minetest.add_entity(pos, "adabots:turtle")
+    if minetest.is_protected(pos, owner) then
+      return itemstack
+    end
+    local initial_data = {
+      owner = owner
+    }
+
+    minetest.add_entity(pos, "adabots:turtle", minetest.serialize(initial_data))
     if not (creative and creative.is_enabled_for
       and creative.is_enabled_for(placer:get_player_name())) then
       itemstack:take_item()

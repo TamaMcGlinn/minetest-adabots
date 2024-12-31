@@ -494,8 +494,16 @@ function TurtleEntity:pickup(stack)
   end
 end
 
+function TurtleEntity:is_adabots_turtle()
+  return true
+end
+
 function TurtleEntity:is_player()
   return false
+end
+
+function TurtleEntity:get_owner()
+  return self.owner
 end
 
 function TurtleEntity:get_player_name()
@@ -1074,14 +1082,14 @@ local function partial(f, arg) return function(...) return f(arg, ...) end end
 -- MAIN TURTLE ENTITY FUNCTIONS------------------------------------------
 function TurtleEntity:on_activate(staticdata, dtime_s)
   local data = minetest.deserialize(staticdata)
-  if type(data) ~= "table" or not data.complete then data = {} end
+  if type(data) ~= "table" then data = {} end
   -- Give ID
   adabots.num_turtles = adabots.num_turtles + 1
   self.id = adabots.num_turtles
   self.name = data.name or "Bob"
   self.workspace = data.workspace
   self.is_listening = data.is_listening or false
-  -- self.owner = minetest.get_meta(pos):get_string("owner")
+  self.owner = data.owner
   self.heading = data.heading or 0
   self.previous_answers = data.previous_answers or {}
   self.coroutine = data.coroutine or nil
@@ -1279,6 +1287,7 @@ function TurtleEntity:get_staticdata()
     workspace = self.workspace,
     is_listening = self.is_listening,
     heading = self.heading,
+    owner = self.owner,
     previous_answers = self.previous_answers,
     coroutine = nil, -- self.coroutine,
     fuel = self.fuel,
