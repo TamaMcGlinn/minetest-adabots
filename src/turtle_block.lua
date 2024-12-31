@@ -21,16 +21,16 @@ minetest.register_node("adabots:turtle", {
   end
 })
 
-local iron = 'mcl_core:iron_ingot'
-local chest = 'mcl_chests:chest'
-local redstone_block = 'mesecons_torch:redstoneblock'
-local gold = 'mcl_core:gold_ingot'
+local steel = 'default:steelblock'
+local chest = 'default:chest'
+local diamond = 'default:diamondblock'
+local gold = 'default:goldblock'
 
 minetest.register_craft({
   output = 'adabots:turtle',
   recipe = {
-    {gold, chest,          gold},
-    {iron, redstone_block, iron},
-    {gold, iron,           gold}
+    {gold, chest, gold},
+    {steel, diamond, steel},
+    {gold, steel, gold}
   }
 })
