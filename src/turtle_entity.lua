@@ -2,32 +2,64 @@
 local INSTRUCTION_PROXY_URL = os.getenv("INSTRUCTION_PROXY_BASE_URL") or nil
 minetest.log("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
 
+local botaccess_max_share_count = 12
+
+-- Load support for factions
+local factions_available = minetest.global_exists("factions")
+
 local modpath = minetest.get_modpath("adabots")
 local S = minetest.get_translator("adabots")
 local F = function (s) return minetest.formspec_escape(s) end
 
+-- https://stackoverflow.com/a/16077650/2144408
+local function deepcopy(o, seen)
+  seen = seen or {}
+  if o == nil then return nil end
+  if seen[o] then return seen[o] end
+
+  local no
+  if type(o) == 'table' then
+    no = {}
+    seen[o] = no
+
+    for k, v in next, o, nil do
+      no[deepcopy(k, seen)] = deepcopy(v, seen)
+    end
+    setmetatable(no, deepcopy(getmetatable(o), seen))
+  else -- number, string, boolean, etc
+    no = o
+  end
+  return no
+end
+
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 local FORMNAME_TURTLE_CONTROLPANEL = "adabots:turtle:controlpanel:"
+local FORMNAME_TURTLE_ACCESSCONTROL = "adabots:turtle:accesscontrol:"
 local FORMNAME_TURTLE_SLOTSELECT = "adabots:turtle:slotselect:"
 local FORMNAME_TURTLE_NOTYOURBOT = "adabots:turtle:notyourbot:"
 local turtle_forms = {
   [FORMNAME_TURTLE_INVENTORY] = {
-    ["formspec_function"] = function(turtle)
-      return turtle:get_formspec_inventory()
+    ["formspec_function"] = function(turtle, player_name)
+      return turtle:get_formspec_inventory(player_name)
     end
   },
   [FORMNAME_TURTLE_CONTROLPANEL] = {
-    ["formspec_function"] = function(turtle)
+    ["formspec_function"] = function(turtle, _)
       return turtle:get_formspec_controlpanel()
     end
   },
+  [FORMNAME_TURTLE_ACCESSCONTROL] = {
+    ["formspec_function"] = function(turtle, _)
+      return turtle:get_formspec_accesscontrol()
+    end
+  },
   [FORMNAME_TURTLE_SLOTSELECT] = {
-    ["formspec_function"] = function(turtle)
+    ["formspec_function"] = function(turtle, _)
       return turtle:get_formspec_slotselect()
     end
   },
   [FORMNAME_TURTLE_NOTYOURBOT] = {
-    ["formspec_function"] = function(turtle)
+    ["formspec_function"] = function(turtle, _)
       return turtle:get_formspec_notyourbot()
     end
   }
@@ -173,6 +205,14 @@ minetest.register_on_player_receive_fields(
     end
     local turtle = get_turtle()
     local player_name = player:get_player_name()
+    if not isForm(FORMNAME_TURTLE_NOTYOURBOT) and not turtle:player_allowed_to_control_bot(player_name) then
+      -- close immediately, don't process any inputs
+      -- this can happen if you open something but then your access is revoked while
+      -- you still have the menu open.
+      minetest.close_formspec(player_name, formname)
+      minetest.after(0.2, turtle.open_form, turtle, player_name, FORMNAME_TURTLE_NOTYOURBOT)
+      return true
+    end
     local function refresh(form)
       turtle:open_form(player_name, form)
     end
@@ -197,6 +237,9 @@ minetest.register_on_player_receive_fields(
       end
       if fields.open_controlpanel then
         turtle:open_controlpanel(player_name)
+      end
+      if fields.access_control then
+        turtle:open_access_control(player_name)
       end
       if fields.open_slotselect then
         turtle:open_slotselect(player_name)
@@ -234,6 +277,37 @@ minetest.register_on_player_receive_fields(
       if fields.ok_button then
         minetest.close_formspec(player_name, formname)
       end
+    elseif isForm(FORMNAME_TURTLE_ACCESSCONTROL) then
+      local add_member_input = fields.adabotaccess_add_member
+      -- reset formspec until close button pressed
+      if (fields.close_me or fields.quit) and (not add_member_input or add_member_input == "") then
+        return
+      end
+      -- only owner can add names
+      if turtle.owner ~= player_name then
+        return
+      end
+      -- add faction members
+      if factions_available and fields.faction_members ~= nil then
+        turtle:set_allow_faction_members_access(fields.faction_members == "true")
+      end
+      -- add member [+]
+      if add_member_input then
+        for _, i in pairs(add_member_input:split(" ")) do
+          turtle:add_member(i)
+        end
+      end
+      -- remove member [x]
+      for field, _ in pairs(fields) do
+        if string.sub(field, 0,
+          string.len("adabotaccess_del_member_")) == "adabotaccess_del_member_" then
+          local disallowed_player = string.sub(field,string.len("adabotaccess_del_member_") + 1)
+          turtle:del_member(disallowed_player)
+        end
+      end
+
+      refresh(FORMNAME_TURTLE_ACCESSCONTROL)
+      return true
     else
       return false -- Unknown formname, input not processed
     end
@@ -801,7 +875,7 @@ function TurtleEntity:itemPushTurtleslot(nodeLocation, turtleslot, listname)
 end
 
 -- MAIN TURTLE USER INTERFACE------------------------------------------
-function TurtleEntity:get_formspec_inventory()
+function TurtleEntity:get_formspec_inventory(player_name)
   local turtle_inv_x = 5
   local turtle_inv_y = 0.4
   local selected_x = ((self.selected_slot - 1) % 4) + turtle_inv_x
@@ -830,6 +904,10 @@ function TurtleEntity:get_formspec_inventory()
   local tool_inventory_slot = "list[" .. self.toolinv_fullname ..
   ";toolmain;0,3.4;1,1;]"
   local tool = tool_label .. tool_bg .. tool_inventory_slot
+  local access_control_button = ""
+  if self.owner == player_name then
+    access_control_button = "image_button[3,3.4;1,1;lock.png;access_control;]tooltip[access_control;Set allowed players]"
+  end
   local controlpanel_button =
   "image_button[4,3.4;1,1;open_controlpanel.png;open_controlpanel;]" ..
   "tooltip[open_controlpanel;Open controlpanel]"
@@ -862,7 +940,7 @@ function TurtleEntity:get_formspec_inventory()
 
   return
     general_settings .. turtle_image .. turtle_name .. playpause_button ..
-    tool .. controlpanel_button .. connection_settings ..
+    tool .. access_control_button .. controlpanel_button .. connection_settings ..
     turtle_inventory .. turtle_selection .. turtle_inventory_items ..
     player_inventory .. player_inventory_items
 end
@@ -881,7 +959,6 @@ end
 
 function TurtleEntity:get_workspace_index()
   if self.workspace == nil then
-    print("nil workspace")
     return 0
   end
   local index = 1
@@ -1005,6 +1082,146 @@ function TurtleEntity:get_formspec_controlpanel()
   return general_settings .. buttons
 end
 
+function TurtleEntity:del_member(name)
+  for i, n in pairs(self.allowed_players) do
+    if n == name then
+      table.remove(self.allowed_players, i)
+      break
+    end
+  end
+end
+
+-- add player name to list of members that are
+-- allowed access to control the bot
+function TurtleEntity:add_member(name)
+  -- Validate player name for MT compliance
+  if name ~= string.match(name, "[%w_-]+") then
+    return
+  end
+
+  -- Constant (20) defined by player.h
+  if name:len() > 25 then
+    return
+  end
+
+  -- does name already exist?
+  if self.owner == name or self:is_member(name) then
+    return
+  end
+
+  local members = self.allowed_players or {}
+  if #members >= botaccess_max_share_count then
+    return
+  end
+
+  table.insert(members, name)
+  self.allowed_players = members
+end
+
+function TurtleEntity:set_allow_faction_members_access(allow_faction_access)
+  self.allow_faction_access = allow_faction_access
+end
+
+function TurtleEntity:is_member(name)
+  if factions_available
+    and self.allow_faction_access then
+    if factions.version == nil then
+      -- backward compatibility
+      if factions.get_player_faction(name) ~= nil
+        and factions.get_player_faction(self.owner) ==
+        factions.get_player_faction(name) then
+        return true
+      end
+    else
+      -- is member if player and owner share at least one faction
+      local player_factions = factions.get_player_factions(name)
+      local owner = self.owner
+
+      if player_factions ~= nil and player_factions ~= false then
+        for _, f in ipairs(player_factions) do
+          if factions.player_is_in_faction(f, owner) then
+            return true
+          end
+        end
+      end
+    end
+  end
+
+  local members = self.allowed_players or {}
+  for _, n in pairs(members) do
+    if n == name then
+      return true
+    end
+  end
+
+  return false
+end
+
+function TurtleEntity:get_formspec_accesscontrol()
+  local formspec = "size[8,7]"
+  .. default.gui_bg
+  .. default.gui_bg_img
+  .. "label[2.5,0;" .. F(S("Access control") .. " for bot " .. self.name) .. "]"
+  .. "label[0,2;" .. F(S("Allowed players:")) .. "]"
+  .. "button_exit[2.5,6.2;3,0.5;close_me;" .. F(S("Close")) .. "]"
+  .. "field_close_on_enter[adabotaccess_add_member;false]"
+
+  local members = self.allowed_players or {}
+  local npp = botaccess_max_share_count -- max users added to protector list
+  local checkbox_faction = false
+
+  -- Display the checkbox only if the owner is member of at least 1 faction
+  if factions_available then
+    if factions.version == nil then
+      -- backward compatibility
+      if factions.get_player_faction(self.owner) then
+        checkbox_faction = true
+      end
+    else
+      local player_factions = factions.get_player_factions(self.owner)
+      if player_factions ~= nil and #player_factions >= 1 then
+        checkbox_faction = true
+      end
+    end
+  end
+  if checkbox_faction then
+    formspec = formspec .. "checkbox[0,5;faction_members;"
+    .. F(S("Allow faction access"))
+    .. ";" .. (meta:get_int("faction_members") == 1 and
+    "true" or "false") .. "]"
+    if npp > 8 then
+      npp = 8
+    end
+  end
+
+  local i = 0
+  for n = 1, #members do
+    if i < npp then
+      -- show username
+      formspec = formspec .. "button[" .. (i % 4 * 2)
+      .. "," .. math.floor(i / 4 + 3)
+      .. ";1.5,.5;adabotaccess_member;" .. F(members[n]) .. "]"
+      -- username remove button
+      .. "button[" .. (i % 4 * 2 + 1.25) .. ","
+      .. math.floor(i / 4 + 3)
+      .. ";.75,.5;adabotaccess_del_member_" .. F(members[n]) .. ";X]"
+    end
+    i = i + 1
+  end
+
+  if i < npp then
+    -- user name entry field
+    formspec = formspec .. "field[" .. (i % 4 * 2 + 1 / 3) .. ","
+    .. (math.floor(i / 4 + 3) + 1 / 3)
+    .. ";1.433,.5;adabotaccess_add_member;;]"
+    -- username add button
+    .."button[" .. (i % 4 * 2 + 1.25) .. ","
+    .. math.floor(i / 4 + 3) .. ";.75,.5;adabotaccess_submit;+]"
+  end
+
+  return formspec
+end
+
 function TurtleEntity:get_formspec_slotselect()
   local general_settings = "formspec_version[4]" .. "size[25,12]" ..
   "no_prepend[]" .. "bgcolor[#00000000]" ..
@@ -1066,8 +1283,8 @@ function TurtleEntity:get_formspec_notyourbot()
   local style = "style_type[label;font=bold]"
   local locked = "label[3.5,1.0;" .. F(minetest.colorize("#FF0000", "LOCKED")) .. "]"
   local unstyle = "style_type[label;font=]"
-  local lock_image = "image[3.6,0.6;1.25,1;lock.png;false]"
-  local not_your_bot = "label[2.0,1.5;You cannot control this bot.]"
+  local lock_image = "image[3.6,0;1.25,1.25;lock.png;false]"
+  local not_your_bot = "label[2.0,1.5;You cannot control " .. self.name .. ".]"
   local belongs_to = "label[2.0,2.0;This bot belongs to " .. owner_name .. ".]"
   local ask_access = "label[2.0,2.5;You can ask " .. owner_name .. " to grant you access]"
   local craft_own = "label[2.0,3.0;or you can craft your own:]"
@@ -1077,15 +1294,52 @@ function TurtleEntity:get_formspec_notyourbot()
     not_your_bot .. belongs_to .. ask_access .. craft_own .. craft_recipe .. ok_button
 end
 
--- Called when a player wants to put something into the inventory.
+-- Called when a player wants to put something into tool inventory.
 -- Return value: number of items allowed to put.
 -- Return value -1: Allow and don't modify item count in inventory.
-local function toolinv_allow_put(inv, listname, index, stack, player)
+function TurtleEntity:toolinv_allow_put(inv, listname, index, stack, player)
+  local player_name = player:get_player_name()
+  if not self:player_allowed_to_control_bot(player_name) then
+    return 0
+  end
   if is_supported_toolname(stack:get_name()) then
     return 1
   else
     return 0
   end
+end
+
+-- Called when a player wants to take something from the tool inventory.
+-- Return value: number of items allowed to take.
+-- Return value -1: Allow and don't modify item count in inventory.
+function TurtleEntity:toolinv_allow_take(inv, listname, index, stack, player)
+  local player_name = player:get_player_name()
+  if not self:player_allowed_to_control_bot(player_name) then
+    return 0
+  end
+  return 1
+end
+
+-- Called when a player wants to put something in the bot inventory.
+-- Return value: number of items allowed to put.
+-- Return value -1: Allow and don't modify item count in inventory.
+function TurtleEntity:inv_allow_put(inv, listname, index, stack, player)
+  local player_name = player:get_player_name()
+  if not self:player_allowed_to_control_bot(player_name) then
+    return 0
+  end
+  return 999
+end
+
+-- Called when a player wants to take something from the bot inventory.
+-- Return value: number of items allowed to put.
+-- Return value -1: Allow and don't modify item count in inventory.
+function TurtleEntity:inv_allow_take(inv, listname, index, stack, player)
+  local player_name = player:get_player_name()
+  if not self:player_allowed_to_control_bot(player_name) then
+    return 0
+  end
+  return 999
 end
 
 function TurtleEntity:toolinv_on_put(inv, listname, index, stack, player)
@@ -1111,16 +1365,20 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
   self.is_listening = data.is_listening or false
   self.owner = data.owner
   self.heading = data.heading or 0
-  self.previous_answers = data.previous_answers or {}
   self.coroutine = data.coroutine or nil
   self.fuel = data.fuel or adabots.config.fuel_initial
   self.selected_slot = data.selected_slot or 1
   self.autoRefuel = data.autoRefuel or true
+  self.allowed_players = minetest.deserialize(data.allowed_players or "{}")
+  self.allow_faction_access = data.allow_faction_access
 
   -- Create inventory
   self.inv_name = "adabots:turtle:" .. self.id
   self.inv_fullname = "detached:" .. self.inv_name
-  self.inv = minetest.create_detached_inventory(self.inv_name, {})
+  self.inv = minetest.create_detached_inventory(self.inv_name, {
+    allow_put = partial(TurtleEntity.inv_allow_put, self),
+    allow_take = partial(TurtleEntity.inv_allow_take, self)
+  })
   if self.inv == nil or self.inv == false then
     error("Could not spawn inventory")
   end
@@ -1129,8 +1387,8 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
   self.toolinv_name = "adabots:turtle_tool:" .. self.id
   self.toolinv_fullname = "detached:" .. self.toolinv_name
   self.toolinv = minetest.create_detached_inventory(self.toolinv_name, {
-    allow_put = toolinv_allow_put,
-    -- on_move = function(inv, from_list, from_index, to_list, to_index, count, player),
+    allow_put = partial(TurtleEntity.toolinv_allow_put, self),
+    allow_take = partial(TurtleEntity.toolinv_allow_take, self),
     on_put = partial(TurtleEntity.toolinv_on_put, self),
     on_take = partial(TurtleEntity.toolinv_on_take, self)
   })
@@ -1222,7 +1480,9 @@ function TurtleEntity:player_allowed_to_control_bot(player_name)
   if minetest.check_player_privs(player_name, {adabots_override_bot_lock=true}) then
     return true
   end
-  -- TODO check allowlist of playernames
+  if self:is_member(player_name) then
+    return true
+  end
   return false
 end
 
@@ -1329,14 +1589,14 @@ function TurtleEntity:get_staticdata()
     is_listening = self.is_listening,
     heading = self.heading,
     owner = self.owner,
-    previous_answers = self.previous_answers,
     coroutine = nil, -- self.coroutine,
     fuel = self.fuel,
     selected_slot = self.selected_slot,
     autoRefuel = self.autoRefuel,
+    allowed_players = minetest.serialize(self.allowed_players),
+    allow_faction_access = self.allow_faction_access,
     inv = serializeInventory(self.inv),
     toolinv = serializeInventory(self.toolinv),
-    complete = true
   })
 end
 -- MAIN PLAYER INTERFACE (CALL THESE)------------------------------------------
@@ -1512,7 +1772,7 @@ end
 
 function TurtleEntity:open_form(player_name, form_name)
   local form = turtle_forms[form_name]
-  local formspec = form.formspec_function(self)
+  local formspec = form.formspec_function(self, player_name)
   minetest.show_formspec(player_name, form_name .. self.id, formspec)
 end
 
@@ -1522,6 +1782,10 @@ end
 
 function TurtleEntity:open_controlpanel(player_name)
   self:open_form(player_name, FORMNAME_TURTLE_CONTROLPANEL)
+end
+
+function TurtleEntity:open_access_control(player_name)
+  self:open_form(player_name, FORMNAME_TURTLE_ACCESSCONTROL)
 end
 
 function TurtleEntity:open_slotselect(player_name)
@@ -1775,11 +2039,13 @@ function TurtleEntity:setAwakeTexture()
 end
 
 function TurtleEntity:getFuel() return self.fuel end
+
 function TurtleEntity:isTurtleslotEmpty(turtleslot)
   return self:getTurtleslot(turtleslot):is_empty()
 end
+
 function TurtleEntity:setAutoRefuel(autoRefuel)
-  self.autoRefuel = not not autoRefuel
+  self.autoRefuel = autoRefuel
 end
 
 function TurtleEntity:autoRefuel()
@@ -1803,27 +2069,6 @@ local function register_or_override_entity(entity_name, entity_definition)
 end
 
 register_or_override_entity("adabots:turtle", TurtleEntity)
-
--- https://stackoverflow.com/a/16077650/2144408
-local function deepcopy(o, seen)
-  seen = seen or {}
-  if o == nil then return nil end
-  if seen[o] then return seen[o] end
-
-  local no
-  if type(o) == 'table' then
-    no = {}
-    seen[o] = no
-
-    for k, v in next, o, nil do
-      no[deepcopy(k, seen)] = deepcopy(v, seen)
-    end
-    setmetatable(no, deepcopy(getmetatable(o), seen))
-  else -- number, string, boolean, etc
-    no = o
-  end
-  return no
-end
 
 local PickaxeEntity = {
   initial_properties = {
