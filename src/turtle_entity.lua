@@ -197,6 +197,9 @@ minetest.register_on_player_receive_fields(
     for form_name, _ in pairs(turtle_forms) do
       if isForm(form_name) then turtleform = form_name end
     end
+    if turtleform == "" then
+      return false
+    end
     local function get_turtle()
       local number_suffix =
       string.sub(formname, 1 + string.len(turtleform))
@@ -281,11 +284,11 @@ minetest.register_on_player_receive_fields(
       local add_member_input = fields.adabotaccess_add_member
       -- reset formspec until close button pressed
       if (fields.close_me or fields.quit) and (not add_member_input or add_member_input == "") then
-        return
+        return false
       end
       -- only owner can add names
       if turtle.owner ~= player_name then
-        return
+        return false
       end
       -- add faction members
       if factions_available and fields.faction_members ~= nil then
