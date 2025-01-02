@@ -1839,16 +1839,7 @@ local function post_instruction_result(server_url, workspaceId, result,
     method = "GET",
     timeout = 1
   }
-  local verify_result = function(res_data)
-    -- TODO this got changed, we can't verify anymore like this
-    if res_data ~= "returnValue changed to '" .. result ..
-      "' for bot state of workspaceId " .. workspaceId .. " and bot name " ..
-      bot_name then
-      minetest.debug("error while returning: " .. res_data)
-    end
-  end
   http_api.fetch(set_result_options, function(res)
-    verify_result(res.data)
     state_reset_functor()
   end)
 end
