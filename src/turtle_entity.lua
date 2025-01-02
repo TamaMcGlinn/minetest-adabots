@@ -622,7 +622,7 @@ function TurtleEntity:build(nodeLocation)
   if decoration ~= nil then
     nodeLocation = {
       ["x"] = nodeLocation.x,
-      ["y"] = nodeLocation.y + decoration["place_offset_y"],
+      ["y"] = nodeLocation.y + (decoration["place_offset_y"] or 0),
       ["z"] = nodeLocation.z
     }
   end
