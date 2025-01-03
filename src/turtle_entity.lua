@@ -1368,12 +1368,11 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
   self.is_listening = data.is_listening or false
   self.owner = data.owner
   self.heading = data.heading or 0
-  self.coroutine = data.coroutine or nil
   self.fuel = data.fuel or adabots.config.fuel_initial
   self.selected_slot = data.selected_slot or 1
   self.autoRefuel = data.autoRefuel or true
   self.allowed_players = minetest.deserialize(data.allowed_players or "{}")
-  self.allow_faction_access = data.allow_faction_access
+  self.allow_faction_access = data.allow_faction_access or false
 
   -- Create inventory
   self.inv_name = "adabots:turtle:" .. self.id
@@ -1584,23 +1583,45 @@ function TurtleEntity:update_nametag()
   self.text_entity:set_yaw(0)
 end
 
+-- Find first path to value inside input
+-- with type 'userdata' by calling itself for each element
+-- of lists and dictionaries
+local function path_to_userdata(input)
+  if type(input) == 'userdata' then
+    return ""
+  end
+  if type(input) == 'table' then
+    for key, value in pairs(input) do
+      local subpath = path_to_userdata(value)
+      if subpath ~= nil then
+        return "." .. key .. subpath
+      end
+    end
+  end
+  return nil
+end
+
 function TurtleEntity:get_staticdata()
-  return minetest.serialize({
+  local data = {
     id = self.id,
     name = self.name,
     workspace = self.workspace,
     is_listening = self.is_listening,
     heading = self.heading,
     owner = self.owner,
-    coroutine = nil, -- self.coroutine,
     fuel = self.fuel,
     selected_slot = self.selected_slot,
     autoRefuel = self.autoRefuel,
-    allowed_players = minetest.serialize(self.allowed_players),
+    allowed_players = minetest.serialize(self.allowed_players or {}),
     allow_faction_access = self.allow_faction_access,
     inv = serializeInventory(self.inv),
     toolinv = serializeInventory(self.toolinv),
-  })
+  }
+  local userdata_path = path_to_userdata(data)
+  if userdata_path ~= nil then
+    minetest.log("error", "attempted to serialize userdata at " .. userdata_path)
+  end
+  return minetest.serialize(data)
 end
 -- MAIN PLAYER INTERFACE (CALL THESE)------------------------------------------
 function TurtleEntity:get_pos() return self.object:get_pos() end
