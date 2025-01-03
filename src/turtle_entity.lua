@@ -32,6 +32,16 @@ local function deepcopy(o, seen)
   return no
 end
 
+-- remove protections while doing the action passed in
+-- and then re-enable protections again
+local function override_protection(action)
+  local old_is_protected = minetest.is_protected
+  minetest.is_protected = function(_, _) return false end
+  local result = action()
+  minetest.is_protected = old_is_protected
+  return result
+end
+
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 local FORMNAME_TURTLE_CONTROLPANEL = "adabots:turtle:controlpanel:"
 local FORMNAME_TURTLE_ACCESSCONTROL = "adabots:turtle:accesscontrol:"
@@ -545,6 +555,7 @@ function TurtleEntity:mine(nodeLocation)
   if nodeLocation == nil then return false end
   local node = minetest.get_node(nodeLocation)
   if node.name == "air" then return false end
+  if not self:is_allowed_to_modify(nodeLocation) then return false end
 
   if self:can_pickup_liquid() then
     local filled_bucket = self:get_liquid_from(node.name)
@@ -564,7 +575,7 @@ function TurtleEntity:mine(nodeLocation)
 
   -- check pickaxe strong enough
   if not self:pickaxe_can_dig(node) then return false end
-  if minetest.dig_node(nodeLocation) then
+  if override_protection(function () minetest.dig_node(nodeLocation) end) then
     self:increment_tool_uses()
     return true
   else
@@ -610,9 +621,30 @@ local function get_decoration_from_item(item_name)
   return nil
 end
 
+function TurtleEntity:get_players_that_can_control_bot()
+  local players = deepcopy(self.allowed_players)
+  table.insert(players, self.owner)
+  -- if factions_available and self.allow_faction_access then
+  -- -- TODO add all players in the owner's factions
+  -- end
+  return players
+end
+
+function TurtleEntity:is_allowed_to_modify(nodeLocation)
+  for _, player in ipairs(self:get_players_that_can_control_bot()) do
+    if minetest.is_protected(nodeLocation, player) then
+      return false
+    end
+  end
+  return true
+end
+
 function TurtleEntity:build(nodeLocation)
   local stack = self:getTurtleslot(self.selected_slot)
   if stack == nil then
+    return false
+  end
+  if not self:is_allowed_to_modify(nodeLocation) then
     return false
   end
   if stack:is_empty() then return false end
@@ -626,11 +658,11 @@ function TurtleEntity:build(nodeLocation)
       ["z"] = nodeLocation.z
     }
   end
-  local newstack = item_registration.on_place(stack, self, {
+  local newstack = override_protection(function () return item_registration.on_place(stack, self, {
     type = "node",
     under = nodeLocation,
     above = nodeLocation
-  })
+  }) end)
   if newstack == nil then
     return false
   end
