@@ -440,9 +440,50 @@ function Union(t1, t2)
   return output
 end
 
+local function find_protector_owner_for(pos)
+  local r = tonumber(minetest.settings:get("protector_radius")) or 5
+  pos = minetest.find_nodes_in_area(
+    {x = pos.x - r, y = pos.y - r, z = pos.z - r},
+    {x = pos.x + r, y = pos.y + r, z = pos.z + r},
+    {"protector:protect", "protector:protect2", "protector:protect_hidden"})
+  for n = 1, #pos do
+    local meta = minetest.get_meta(pos[n])
+    local owner = meta:get_string("owner")
+    return owner
+  end
+  return nil
+end
+
+function TurtleEntity:allowed_to_move_to(nodeLocation)
+  if self:is_allowed_to_modify(nodeLocation) then
+    return true
+  end
+  -- an exception; if you are already inside the protection area,
+  -- we will allow you to keep moving to get out of the protection
+  -- again (of that player).
+  -- this is to prevent players placing a protection just to block
+  -- your bot that is already there
+  local currentLocation = self:get_pos()
+  if not self:is_allowed_to_modify(currentLocation) then
+    local current_protector_owner = find_protector_owner_for(currentLocation)
+    local new_protector_owner = find_protector_owner_for(nodeLocation)
+    if new_protector_owner == nil or  -- moving outside protection
+      current_protector_owner == new_protector_owner or -- moving within same player's protection
+      self:player_allowed_to_control_bot(new_protector_owner) -- into protection of Bot's own members
+    then
+      -- exception granted, you can keep moving until you're no longer
+      -- inside that owner's protections
+      return true
+    end
+  end
+  return false
+end
+
 function TurtleEntity:move(nodeLocation)
   -- Verify new pos is empty
   if node_walkable(nodeLocation) then return false end
+  if not self:allowed_to_move_to(nodeLocation) then return false end
+
   -- Push player if present
   local below = vector.new(nodeLocation.x, nodeLocation.y - 1.0,
     nodeLocation.z)
