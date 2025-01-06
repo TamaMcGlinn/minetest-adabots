@@ -246,6 +246,28 @@ minetest.register_on_player_receive_fields(
       if fields.close then
         minetest.close_formspec(player_name, formname)
       end
+    end
+    if isForm(FORMNAME_TURTLE_INVENTORY) then
+      respond_to_common_controls()
+      if fields.workspace then
+        turtle:select_workspace(fields.workspace)
+      end
+      updateBotField(turtle, fields, "name",
+        function() turtle:update_nametag() end)
+      if fields.open_controlpanel then
+        turtle:open_controlpanel(player_name)
+      end
+      if fields.listen then
+        turtle:toggle_is_listening()
+        refresh(turtleform)
+        return true
+      end
+      if fields.access_control then
+        turtle:open_access_control(player_name)
+      end
+      return true
+    elseif isForm(FORMNAME_TURTLE_CONTROLPANEL) then
+      respond_to_common_controls()
       if fields.arrow_forward then turtle:forward(true) end
       if fields.arrow_backward then turtle:back(true) end
       if fields.arrow_turnleft then turtle:turnLeft(true) end
@@ -261,34 +283,15 @@ minetest.register_on_player_receive_fields(
       if fields.open_inventory then
         turtle:open_inventory(player_name)
       end
-      if fields.open_controlpanel then
-        turtle:open_controlpanel(player_name)
+      if fields.craft then
+        turtle:craft(1)
+        refresh(FORMNAME_TURTLE_CONTROLPANEL)
       end
-      if fields.access_control then
-        turtle:open_access_control(player_name)
-      end
+      if fields.suck then turtle:suck(0) end
+      if fields.drop then turtle:drop(0) end
       if fields.open_slotselect then
         turtle:open_slotselect(player_name)
       end
-      if fields.craft then turtle:craft(1) end
-      if fields.suck then turtle:suck(0) end
-      if fields.drop then turtle:drop(0) end
-      if fields.listen then
-        turtle:toggle_is_listening()
-        refresh(turtleform)
-        return true
-      end
-    end
-    if isForm(FORMNAME_TURTLE_INVENTORY) then
-      if fields.workspace then
-        turtle:select_workspace(fields.workspace)
-      end
-      updateBotField(turtle, fields, "name",
-        function() turtle:update_nametag() end)
-      respond_to_common_controls()
-      return true
-    elseif isForm(FORMNAME_TURTLE_CONTROLPANEL) then
-      respond_to_common_controls()
       return true
     elseif isForm(FORMNAME_TURTLE_SLOTSELECT) then
       for i = 1, TURTLE_INVENTORYSIZE do
