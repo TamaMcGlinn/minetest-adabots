@@ -1545,7 +1545,8 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
   self.heading = data.heading or 0
   self.energy = data.energy or adabots.config.energy_initial
   self.selected_slot = data.selected_slot or 1
-  self.autoRefuel = data.autoRefuel or true
+  self.autoRefuel = data.autoRefuel
+  if self.autoRefuel == nil then self.autoRefuel = true end
   self.allowed_players = minetest.deserialize(data.allowed_players or "{}")
   self.allow_faction_access = data.allow_faction_access or false
 
