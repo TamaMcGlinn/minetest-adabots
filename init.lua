@@ -3,18 +3,18 @@ adabots = {
     -- Turtles are yielded after every instruction
     -- This is how long timed turtle actions take, such as mining, moving, and placing
     turtle_tick = tonumber(minetest.settings:get("adabots_turtle_tick_time")) or .3,
-    fuel_multiplier = tonumber(minetest.settings:get("adabots_fuel_multiplier")) or 1.0,
+    fuel_multiplier = tonumber(minetest.settings:get("adabots_fuel_multiplier")) or 12.0,
     energy_cost_multiplier = tonumber(minetest.settings:get("adabots_energy_cost_multiplier")) or 1.0,
 
     -- Energy settings
-    energy_initial = tonumber(minetest.settings:get("adabots_energy_initial")) or 0,
+    energy_initial = tonumber(minetest.settings:get("adabots_energy_initial")) or 2000,
     -- Refueling above this wastes energy
     energy_max = tonumber(minetest.settings:get("adabots_energy_max")) or 4000,
     turn_energy_cost = tonumber(minetest.settings:get("adabots_turn_energy_cost")) or 0,
     horizontal_energy_cost = tonumber(minetest.settings:get("adabots_horizontal_energy_cost")) or 6,
     upward_energy_cost = tonumber(minetest.settings:get("adabots_upward_energy_cost")) or 30,
     downward_energy_cost = tonumber(minetest.settings:get("adabots_downward_energy_cost")) or 0,
-    hover_energy_cost = tonumber(minetest.settings:get("adabots_hover_energy_cost")) or 4,
+    hover_energy_cost = tonumber(minetest.settings:get("adabots_hover_energy_cost")) or 2,
     think_energy_cost = tonumber(minetest.settings:get("adabots_think_energy_cost")) or 0,
     build_energy_cost = tonumber(minetest.settings:get("adabots_build_energy_cost")) or 20,
     mine_energy_cost = tonumber(minetest.settings:get("adabots_mine_energy_cost")) or 20,
@@ -65,7 +65,6 @@ set_range("horizontal_energy_cost", 0, 1000)
 set_range("upward_energy_cost", 0, 1000)
 set_range("downward_energy_cost", 0, 1000)
 set_range("hover_energy_cost", 0, 1000)
-set_range("think_energy_cost", 0, 1000)
 set_range("build_energy_cost", 0, 1000)
 set_range("mine_energy_cost", 0, 1000)
 
