@@ -77,7 +77,7 @@ local turtle_forms = {
 local supported_tools = {
   "mcl_tools:pick_wood", "mcl_tools:pick_stone", "mcl_tools:pick_iron",
   "mcl_tools:pick_gold", "mcl_tools:pick_diamond",
-  "default:pick_wood", "default:pick_stone", "default:pick_iron",
+  "default:pick_wood", "default:pick_stone", "default:pick_steel",
   "default:pick_bronze", "default:pick_mese", "default:pick_diamond"
 }
 
@@ -97,7 +97,7 @@ local tool_usages = {
   ["mcl_tools:pick_diamond"] = 810,
   ["default:pick_wood"] = 30,
   ["default:pick_stone"] = 60,
-  ["default:pick_iron"] = 180,
+  ["default:pick_steel"] = 180,
   ["default:pick_bronze"] = 180,
   ["default:pick_mese"] = 540,
   ["default:pick_diamond"] = 810
@@ -2188,7 +2188,7 @@ register_or_override_entity("adabots:pick_wood",
   set_pickaxe_properties("pick_wood.png"))
 register_or_override_entity("adabots:pick_stone",
   set_pickaxe_properties("pick_stone.png"))
-register_or_override_entity("adabots:pick_iron",
+register_or_override_entity("adabots:pick_steel",
   set_pickaxe_properties("pick_iron.png"))
 register_or_override_entity("adabots:pick_bronze",
   set_pickaxe_properties("pick_bronze.png"))
