@@ -1,6 +1,6 @@
 -- override this by setting ADABOTS_PROXY_URL environment variable to your own proxy URL
 local INSTRUCTION_PROXY_URL = os.getenv("INSTRUCTION_PROXY_BASE_URL") or nil
-minetest.log("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
+minetest.log("info", "INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
 
 local botaccess_max_share_count = 12
 
@@ -522,6 +522,26 @@ local function get_energy_cost_for_movement_delta(delta)
   return adabots.config.horizontal_energy_cost
 end
 
+---check the bot has enough energy for the given cost,
+---return true if so. If necessary, and autoRefuel enabled,
+---do that first. Return false if not able to get the required energy
+---@param energy_cost any
+---@return boolean
+function TurtleEntity:ensureEnergyFor(energy_cost)
+  if self.autoRefuel then
+    while not self:hasEnergyFor(energy_cost) do
+      -- refuel_from_any_slot is called only after checking
+      -- we don't have enough energy for the task at hand
+      if not self:refuel_from_any_slot() then
+        return false
+      end
+    end
+  elseif not self:hasEnergyFor(energy_cost) then
+    return false
+  end
+  return true
+end
+
 function TurtleEntity:move(nodeLocation)
   -- disallow movement while falling
   local acceleration = self.object:get_acceleration()
@@ -535,7 +555,7 @@ function TurtleEntity:move(nodeLocation)
   -- check we have energy
   local movement_delta = nodeLocation - self.object:get_pos()
   local energy_cost = get_energy_cost_for_movement_delta(movement_delta)
-  if not self:hasEnergyFor(energy_cost) then return false end
+  if not self:ensureEnergyFor(energy_cost) then return false end
 
   -- Push player if present
   local below = vector.new(nodeLocation.x, nodeLocation.y - 1.0,
@@ -669,8 +689,8 @@ function TurtleEntity:mine(nodeLocation)
 
   -- check pickaxe strong enough
   if not self:pickaxe_can_dig(node) then return false end
-  if not self:hasEnergyFor(adabots.config.mine_energy_cost) then return false end
-  if override_protection(function () minetest.dig_node(nodeLocation) end) then
+  if not self:ensureEnergyFor(adabots.config.mine_energy_cost) then return false end
+  if override_protection(function () return minetest.dig_node(nodeLocation) end) then
     if not self:useEnergy(adabots.config.mine_energy_cost) then return false end
     self:increment_tool_uses()
     return true
@@ -755,7 +775,7 @@ function TurtleEntity:build(nodeLocation)
       ["z"] = nodeLocation.z
     }
   end
-  if not self:hasEnergyFor(adabots.config.build_energy_cost) then return false end
+  if not self:ensureEnergyFor(adabots.config.build_energy_cost) then return false end
   local newstack = override_protection(function () return item_registration.on_place(stack, self, {
     type = "node",
     under = nodeLocation,
@@ -1845,7 +1865,8 @@ function TurtleEntity:addEnergy(amount)
     self.energy = adabots.config.energy_max;
     return false;
   end
-  if self.energy + amount >= adabots.config.energy_max then
+  if self.energy + amount > adabots.config.energy_max then
+    -- waste of energy
     self.energy = adabots.config.energy_max;
     return true;
   end
@@ -1862,14 +1883,16 @@ end
 
 ---@returns true if it successfully spent specified amount (correcting first with multiplier)
 function TurtleEntity:useEnergy(amount)
+  self:ensureEnergyFor(amount)
   local corrected_amount = amount * adabots.config.energy_cost_multiplier
+  if self.autoRefuel and self.energy < corrected_amount then
+    self:refuel_from_any_slot()
+  end
   local energy_after = self.energy - corrected_amount;
-  if energy_after > 0 then
-    minetest.log("Used " .. corrected_amount .. ", energylevel = " .. energy_after)
+  if energy_after >= 0 then
     self.energy = energy_after
     return true
   end
-  minetest.log("energylevel = " .. self.energy)
   return false
 end
 
@@ -2226,31 +2249,72 @@ function TurtleEntity:craft(times)
   end
   return true
 end
---- @returns True if fuel was consumed. False if itemslot did not have fuel.
-function TurtleEntity:itemRefuel(turtleslot)
-  if not isValidInventoryIndex(turtleslot) then return false end
 
-  local fuel, afterfuel = minetest.get_craft_result({
+--- stick = 1, wood = 7, tree = 30  (4 sticks to a wood, 4 wood to a tree)
+--- coal = 40, lava bucket = 60
+---@returns burn value of slot contents as fuel (for 1 item)
+function TurtleEntity:get_fuel_time(turtleslot)
+  if not isValidInventoryIndex(turtleslot) then return 0 end
+  local fuel, _ = minetest.get_craft_result({
     method = "fuel",
     width = 1,
     items = {self:getTurtleslot(turtleslot)}
   })
+  return fuel.time
+end
+
+--- @returns True if fuel was consumed. False if itemslot did not have fuel.
+--- consumes up to amount specified; but if amount = 0 or nil, enough is
+--- consumed to fill the tank without wasting, or the whole stack is consumed
+function TurtleEntity:itemRefuel(turtleslot, amount)
+  if not isValidInventoryIndex(turtleslot) then return false end
+
+  local slot_contents = self:getTurtleslot(turtleslot)
+  if slot_contents == nil then return false end
+  local fuel, afterfuel = minetest.get_craft_result({
+    method = "fuel",
+    width = 1,
+    items = {slot_contents}
+  })
   if fuel.time == 0 then return false end
 
-  self:setTurtleslot(turtleslot, afterfuel.items[1])
+  local energy_per_item = fuel.time * adabots.config.fuel_multiplier
+  local max_to_consume = amount or 0
+  if max_to_consume == 0 then
+    -- 0 means "use the whole stack"
+    max_to_consume = slot_contents:get_count()
+  end
+  local energy_room = adabots.config.energy_max - self.energy
+  local max_items_for_energy_room = math.floor(energy_room / energy_per_item)
+  if max_items_for_energy_room == 0 then
+    -- but still burn 1 item even if that would overflow the energy tank
+    max_items_for_energy_room = 1
+  end
+  if max_items_for_energy_room < max_to_consume then
+    -- restrict in order not to waste
+    max_to_consume = max_items_for_energy_room
+  end
 
-  -- Process replacements (Such as buckets from lava buckets)
-  local replacements = fuel.replacements
-  if replacements[1] then
-    local leftover = self.inv:add_item("main", replacements[1])
-    if not leftover:is_empty() then
-      local pos = self:get_pos()
-      local above = vector.new(pos.x, pos.y + 1, pos.z)
-      local drop_pos = minetest.find_node_near(above, 1, {"air"}) or above
-      minetest.item_drop(replacements[1], nil, drop_pos)
+  local burn_result_item = afterfuel.items[1]
+  if burn_result_item ~= nil then
+    burn_result_item:set_count(slot_contents:get_count() - max_to_consume)
+  end
+  self:setTurtleslot(turtleslot, burn_result_item)
+
+  for _ = 1, max_to_consume do
+    -- Process replacements (Such as buckets from lava buckets)
+    local replacements = fuel.replacements
+    if replacements[1] then
+      local leftover = self.inv:add_item("main", replacements[1])
+      if not leftover:is_empty() then
+        local pos = self:get_pos()
+        local above = vector.new(pos.x, pos.y + 1, pos.z)
+        local drop_pos = minetest.find_node_near(above, 1, {"air"}) or above
+        minetest.item_drop(replacements[1], nil, drop_pos)
+      end
     end
   end
-  self:addEnergy(fuel.time * adabots.config.fuel_multiplier)
+  self:addEnergy(energy_per_item * max_to_consume)
   return true
 end
 
@@ -2283,12 +2347,29 @@ function TurtleEntity:setAutoRefuel(autoRefuel)
   self.autoRefuel = autoRefuel
 end
 
-function TurtleEntity:autoRefuel()
-  for turtleslot = 1, 16 do
-    if self:getFuel() > 100 then return true end
-    self:itemRefuel(turtleslot)
+---@returns the slot with the best fuel type - i.e. prefer coal over wood
+function TurtleEntity:get_preferred_fuel_slot()
+  local highest_fuel_value = 0
+  local chosen_fuel_index = nil
+  for turtleslot_offset = 0, TURTLE_INVENTORYSIZE - 1 do
+    -- start at the selected slot, then all slots after selected_slot
+    -- and then the slots from 1 up to the selected_slot
+    local turtleslot = (self.selected_slot - 1 + turtleslot_offset) % TURTLE_INVENTORYSIZE + 1
+    local fuel_value = self:get_fuel_time(turtleslot)
+    if fuel_value > highest_fuel_value then
+      highest_fuel_value = fuel_value
+      chosen_fuel_index = turtleslot
+    end
   end
-  return false
+  return chosen_fuel_index
+end
+
+function TurtleEntity:refuel_from_any_slot()
+  local slot = self:get_preferred_fuel_slot()
+  if slot == nil then
+    return false
+  end
+  return self:itemRefuel(slot, 0)
 end
 
 function TurtleEntity:dump(object) return dump(object) end
