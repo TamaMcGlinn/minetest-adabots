@@ -24,7 +24,7 @@ minetest.register_chatcommand( "adabots_set", {
   func = function( _, param )
     local args = string.split( param, " " )
     if #args ~= 2 then
-      return false, "Usage: /adabots_set <settingname> <multiplier>. E.g. /adabots_set energy_cost_multiplier 0.1"
+      return false, "Usage: /adabots_set <settingname> <multiplier>. E.g. /adabots_set energy_cost_multiplier 0.1 (see /adabots_list_settings)"
     end
     if adabots.config[args[1]] == nil then
       return false, "<settingname> must be a valid adabots setting (see /adabots_list_settings)"

@@ -246,6 +246,9 @@ minetest.register_on_player_receive_fields(
       if fields.close then
         minetest.close_formspec(player_name, formname)
       end
+      if fields.open_controlpanel then
+        turtle:open_controlpanel(player_name)
+      end
     end
     if isForm(FORMNAME_TURTLE_INVENTORY) then
       respond_to_common_controls()
@@ -254,12 +257,20 @@ minetest.register_on_player_receive_fields(
       end
       updateBotField(turtle, fields, "name",
         function() turtle:update_nametag() end)
-      if fields.open_controlpanel then
-        turtle:open_controlpanel(player_name)
-      end
       if fields.listen then
         turtle:toggle_is_listening()
         refresh(turtleform)
+        return true
+      end
+      if fields.refuel then
+        if turtle.autoRefuel == true then
+          turtle:setAutoRefuel(false)
+          refresh(turtleform)
+        else
+          turtle:setAutoRefuel(true)
+          turtle:refuel_from_any_slot()
+          refresh(turtleform)
+        end
         return true
       end
       if fields.access_control then
@@ -1049,8 +1060,18 @@ function TurtleEntity:get_formspec_inventory(player_name)
   local turtle_name = "style_type[field;font_size=26]" ..
   "field[2.03,0.8;3,1;name;AdaBot name;" .. F(self.name) .. "]"
 
-  local autorefuel = "style_type[field;font_size=26]" ..
-  "label[3.03,1.8;name;Autorefuel:]"
+  local fuel_level = math.min(math.max(0, self.energy / adabots.config.energy_max), 1)
+  local nonfull_fuel_images = 29
+  -- even linear distribution so that the max image has an equal range
+  local index = math.min(math.floor(fuel_level * (nonfull_fuel_images+1)), nonfull_fuel_images)
+  local fuelbutton_suffix = tostring(index)
+  local active = ""
+  if self.autoRefuel then
+    active = "active_"
+  end
+  local autorefuel_img = "image[0.98,3.38;1.04,1.04;button_" .. active .. "outline.png]"
+  local refuel_button = "image_button[1,3.4;1,0.96;refuel_" .. fuelbutton_suffix .. ".png;refuel;]tooltip[refuel;Refuel / toggle autoRefuel]"
+  local refueling = autorefuel_img .. refuel_button
 
   local playpause_button = "image_button[4,2.2;1,1;" .. playpause_image ..
   ";listen;]tooltip[listen;Start/stop listening]"
@@ -1096,7 +1117,7 @@ function TurtleEntity:get_formspec_inventory(player_name)
   "list[current_player;main;0,8.24;9,1;0]"
 
   return
-    general_settings .. turtle_image .. turtle_name .. playpause_button ..
+    general_settings .. turtle_image .. turtle_name .. refueling .. playpause_button ..
     tool .. access_control_button .. controlpanel_button .. connection_settings ..
     turtle_inventory .. turtle_selection .. turtle_inventory_items ..
     player_inventory .. player_inventory_items
@@ -1404,11 +1425,11 @@ function TurtleEntity:get_formspec_slotselect()
   }
   local buttons = render_buttons(start, button_table)
 
-  local selected_x = ((self.selected_slot - 1) % 4) + start.x + 0.98
+  local selected_x = ((self.selected_slot - 1) % 4) + start.x + 1
   local selected_y = math.floor((self.selected_slot - 1) / 4) + start.y + 0.02
 
   local turtle_selection = "background[" .. selected_x .. "," .. selected_y -
-  0.05 ..
+  0.02 ..
   ";1.1,1.1;mcl_inventory_hotbar_selected.png]"
 
   local slot_tiles = ""
