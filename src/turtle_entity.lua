@@ -42,6 +42,19 @@ local function override_protection(action)
   return result
 end
 
+-- get all player objects that are more-or-less
+-- standing at that nodelocation
+local function get_players_at(nodeLocation)
+  local players_list = {}
+  local objectsthere = minetest.get_objects_inside_radius(nodeLocation, 0.85)
+  for _,object in ipairs(objectsthere) do
+    if minetest.is_player(object) then
+      players_list[#players_list + 1] = object
+    end
+  end
+  return players_list
+end
+
 local FORMNAME_TURTLE_INVENTORY = "adabots:turtle:inventory:"
 local FORMNAME_TURTLE_CONTROLPANEL = "adabots:turtle:controlpanel:"
 local FORMNAME_TURTLE_ACCESSCONTROL = "adabots:turtle:accesscontrol:"
@@ -381,12 +394,12 @@ function dump(o)
   end
 end
 
--- checks if the location is blocked by any objects
+-- checks if the location is blocked by any non-player objects
 local function is_location_blocked_by_objects(nodeLocation)
   local objectsthere = minetest.get_objects_inside_radius(nodeLocation, 0.85)
   for _, object in ipairs(objectsthere) do
     local props = object:get_properties()
-    if props ~= nil and props.collide_with_objects then
+    if not object:is_player() and props ~= nil and props.collide_with_objects then
       return true
     end
   end
@@ -394,7 +407,7 @@ local function is_location_blocked_by_objects(nodeLocation)
 end
 
 -- "walkable" actually means the player could stand on TOP of the node
--- and not fall. So if it return true, that means the bot cannot move
+-- and not fall. So if it returns true, that means the bot cannot move
 -- into that node.
 local function node_walkable(nodeLocation)
   if nodeLocation == nil then
@@ -415,9 +428,26 @@ local function node_walkable(nodeLocation)
   return false
 end
 
+-- returns true if the player could stand at the position
+-- that means the node itself has to be air,
+-- and also the node above it
 local function player_can_stand_at(pos)
   local above = vector.new(pos.x, pos.y + 1, pos.z)
   return not node_walkable(pos) and not node_walkable(above)
+end
+
+-- returns true if the bot could stand on top of that location
+-- i.e. either it is walkable by the player, or
+-- there are blocking objects there, or there is a player there
+local function bot_can_stand_on(pos)
+  if node_walkable(pos) then
+    return true
+  end
+  local players_there = get_players_at(pos)
+  if #players_there > 0 then
+    return true
+  end
+  return false
 end
 
 function Union(t1, t2)
@@ -479,10 +509,30 @@ function TurtleEntity:allowed_to_move_to(nodeLocation)
   return false
 end
 
+local function get_energy_cost_for_movement_delta(delta)
+  if delta.y > 0 then
+    return adabots.config.upward_energy_cost
+  end
+  if delta.y < 0 then
+    return adabots.config.downward_energy_cost
+  end
+  return adabots.config.horizontal_energy_cost
+end
+
 function TurtleEntity:move(nodeLocation)
+  -- disallow movement while falling
+  local acceleration = self.object:get_acceleration()
+  if acceleration.y < -0.1 then
+    return false
+  end
+
   -- Verify new pos is empty
   if node_walkable(nodeLocation) then return false end
   if not self:allowed_to_move_to(nodeLocation) then return false end
+  -- check we have energy
+  local movement_delta = nodeLocation - self.object:get_pos()
+  local energy_cost = get_energy_cost_for_movement_delta(movement_delta)
+  if not self:hasEnergyFor(energy_cost) then return false end
 
   -- Push player if present
   local below = vector.new(nodeLocation.x, nodeLocation.y - 1.0,
@@ -490,23 +540,23 @@ function TurtleEntity:move(nodeLocation)
   -- TODO make this more robustly push the player the right way
   -- so that you can't drop through when it is carrying you up,
   -- and so it always takes you along when you are on top of it
-  local objectsthere = minetest.get_objects_inside_radius(nodeLocation, 0.85)
-  local objectsbelow = minetest.get_objects_inside_radius(below, 0.85)
-  local objectlist = Union(objectsthere, objectsbelow)
-  for i = 1, #objectlist do
-    local object = objectlist[i]
-    if minetest.is_player(object) then
-      local movement_delta = nodeLocation - self.object:get_pos()
-      local new_player_pos = object:get_pos() + movement_delta
-      -- disallow pushing player into walls
-      if not player_can_stand_at(new_player_pos) then
-        return false
-      end
-      object:move_to(new_player_pos, true)
+  local players_there = get_players_at(nodeLocation)
+  local players_below = get_players_at(below)
+  local players_to_push = Union(players_there, players_below)
+  for _,player in ipairs(players_to_push) do
+    -- if movement_delta.y > 0.9 then movement_delta.y = 1.2 end
+    local new_player_pos = player:get_pos() + movement_delta
+    -- disallow pushing player into walls
+    if not player_can_stand_at(new_player_pos) then
+      return false
     end
+    player:move_to(new_player_pos, true)
   end
+
   -- Take Action
+  if not self:useEnergy(energy_cost) then return false end
   self.object:move_to(nodeLocation, true)
+  self:trigger_hover_check()
   return true
 end
 
@@ -565,7 +615,7 @@ function TurtleEntity:increment_tool_uses()
   local tool_stack = self.toolinv:get_stack("toolmain", 1)
   local table = tool_stack:to_table()
   local wear_increment = tool_wear_rates[table.name]
-  -- minetest.debug("Wear: " .. table.wear)
+  minetest.debug("Wear: " .. table.wear)
   if table.wear > 65535 - wear_increment then
     -- tool is spent
     self.toolinv:set_stack("toolmain", 1, nil)
@@ -616,7 +666,9 @@ function TurtleEntity:mine(nodeLocation)
 
   -- check pickaxe strong enough
   if not self:pickaxe_can_dig(node) then return false end
+  if not self:hasEnergyFor(adabots.config.mine_energy_cost) then return false end
   if override_protection(function () minetest.dig_node(nodeLocation) end) then
+    if not self:useEnergy(adabots.config.mine_energy_cost) then return false end
     self:increment_tool_uses()
     return true
   else
@@ -664,6 +716,7 @@ end
 
 function TurtleEntity:get_players_that_can_control_bot()
   local players = deepcopy(self.allowed_players)
+  if players == nil then players = {} end
   table.insert(players, self.owner)
   -- if factions_available and self.allow_faction_access then
   -- -- TODO add all players in the owner's factions
@@ -699,6 +752,7 @@ function TurtleEntity:build(nodeLocation)
       ["z"] = nodeLocation.z
     }
   end
+  if not self:hasEnergyFor(adabots.config.build_energy_cost) then return false end
   local newstack = override_protection(function () return item_registration.on_place(stack, self, {
     type = "node",
     under = nodeLocation,
@@ -707,6 +761,7 @@ function TurtleEntity:build(nodeLocation)
   if newstack == nil then
     return false
   end
+  if not self:useEnergy(adabots.config.build_energy_cost) then return false end
   self.inv:set_stack("main", self.selected_slot, newstack)
   return true
 end
@@ -970,6 +1025,9 @@ function TurtleEntity:get_formspec_inventory(player_name)
 
   local turtle_name = "style_type[field;font_size=26]" ..
   "field[2.03,0.8;3,1;name;AdaBot name;" .. F(self.name) .. "]"
+
+  local autorefuel = "style_type[field;font_size=26]" ..
+  "label[3.03,1.8;name;Autorefuel:]"
 
   local playpause_button = "image_button[4,2.2;1,1;" .. playpause_image ..
   ";listen;]tooltip[listen;Start/stop listening]"
@@ -1441,7 +1499,7 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
   self.is_listening = data.is_listening or false
   self.owner = data.owner
   self.heading = data.heading or 0
-  self.fuel = data.fuel or adabots.config.fuel_initial
+  self.energy = data.energy or adabots.config.energy_initial
   self.selected_slot = data.selected_slot or 1
   self.autoRefuel = data.autoRefuel or true
   self.allowed_players = minetest.deserialize(data.allowed_players or "{}")
@@ -1529,7 +1587,60 @@ end
 
 function TurtleEntity:on_deactivate() self:remove_pickaxe() end
 
+function TurtleEntity:is_hovering()
+  local pos = self:get_pos()
+  local below = vector.new(pos.x, pos.y - 1.0, pos.z)
+  -- if we can't stand on the node we're standing on,
+  -- then we're hovering
+  return not bot_can_stand_on(below)
+end
+
+-- fall to the ground
+function TurtleEntity:fall_down()
+  self.object:set_acceleration({x=0,y=-9.81,z=0})
+end
+
+-- check every 0.3 s whether we hit the ground, in
+-- which case we set acceleration to 0
+function TurtleEntity:ground_check_tick(dtime)
+  if not self.wait_since_last_ground_check then self.wait_since_last_ground_check = 0 end
+  self.wait_since_last_ground_check = self.wait_since_last_ground_check + dtime
+  if self.wait_since_last_ground_check >= 0.3 then
+    self.wait_since_last_ground_check = 0
+    if not self:is_hovering() then
+      self.object:set_acceleration({x=0,y=0,z=0})
+    end
+  end
+end
+
+-- consume hover energy for every second
+-- the bot is floating
+function TurtleEntity:hover_tick(dtime)
+  if not self.wait_since_last_hover_consume then self.wait_since_last_hover_consume = 0 end
+  self.wait_since_last_hover_consume = self.wait_since_last_hover_consume + dtime
+  if self.wait_since_last_hover_consume >= 1 then
+    self.wait_since_last_hover_consume = 0
+    if self:is_hovering() then
+      local hover_success = self:useEnergy(adabots.config.hover_energy_cost)
+      if not hover_success then
+        self:fall_down()
+      end
+    end
+  end
+end
+
+-- the wait time is reset on every movement,
+-- so that the time it takes to fall down when empty
+-- is consistent
+function TurtleEntity:trigger_hover_check()
+  self.wait_since_last_hover_consume = 1
+end
+
 function TurtleEntity:on_step(dtime)
+  if adabots.config.hover_energy_cost > 0 then
+    self:hover_tick(dtime)
+    self:ground_check_tick(dtime)
+  end
   -- init to 0
   if not self.wait_since_last_step then self.wait_since_last_step = 0 end
 
@@ -1682,7 +1793,7 @@ function TurtleEntity:get_staticdata()
     is_listening = self.is_listening,
     heading = self.heading,
     owner = self.owner,
-    fuel = self.fuel,
+    energy = self.energy,
     selected_slot = self.selected_slot,
     autoRefuel = self.autoRefuel,
     allowed_players = minetest.serialize(self.allowed_players or {}),
@@ -1724,12 +1835,44 @@ function TurtleEntity:getLocRelative(numForward, numUp, numRight)
   new_pos.y = pos.y + (numUp or 0)
   return new_pos
 end
----Consumes a fuel point
-function TurtleEntity:useFuel()
-  if self.fuel > 0 then self.fuel = self.fuel - 1; end
+
+-- returns true if it was possible to add any energy
+function TurtleEntity:addEnergy(amount)
+  if self.energy >= adabots.config.energy_max then
+    self.energy = adabots.config.energy_max;
+    return false;
+  end
+  if self.energy + amount >= adabots.config.energy_max then
+    self.energy = adabots.config.energy_max;
+    return true;
+  end
+  self.energy = self.energy + amount;
+  return true
 end
+
+---@returns true if it has enough energy to use the specified amount
+--- after correcting with cost multiplier, but does not change energy level
+function TurtleEntity:hasEnergyFor(amount)
+  local corrected_amount = amount * adabots.config.energy_cost_multiplier
+  return self.energy >= corrected_amount
+end
+
+---@returns true if it successfully spent specified amount (correcting first with multiplier)
+function TurtleEntity:useEnergy(amount)
+  local corrected_amount = amount * adabots.config.energy_cost_multiplier
+  local energy_after = self.energy - corrected_amount;
+  if energy_after > 0 then
+    minetest.log("Used " .. corrected_amount .. ", energylevel = " .. energy_after)
+    self.energy = energy_after
+    return true
+  end
+  minetest.log("energylevel = " .. self.energy)
+  return false
+end
+
 --- From 0 to 3
 function TurtleEntity:setHeading(heading)
+  if not self:useEnergy(adabots.config.turn_energy_cost) then return false end
   heading = (tonumber(heading) or 0) % 4
   if self.heading ~= heading then
     self.heading = heading
@@ -1737,6 +1880,7 @@ function TurtleEntity:setHeading(heading)
   end
   return true
 end
+
 function TurtleEntity:getHeading() return self.heading end
 function TurtleEntity:turnLeft() return self:setHeading(self:getHeading() + 1) end
 function TurtleEntity:turnRight() return self:setHeading(self:getHeading() - 1) end
@@ -2103,7 +2247,7 @@ function TurtleEntity:itemRefuel(turtleslot)
       minetest.item_drop(replacements[1], nil, drop_pos)
     end
   end
-  self.fuel = self.fuel + fuel.time * adabots.config.fuel_multiplier
+  self:addEnergy(fuel.time * adabots.config.fuel_multiplier)
   return true
 end
 
