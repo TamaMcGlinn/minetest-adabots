@@ -787,7 +787,7 @@ function TurtleEntity:build(nodeLocation)
     }
   end
   if not self:ensureEnergyFor(adabots.config.build_energy_cost) then return false end
-  local newstack = override_protection(function () return item_registration.on_place(stack, self, {
+  local newstack = override_protection(function () return item_registration.on_place(stack, nil, {
     type = "node",
     under = nodeLocation,
     above = nodeLocation
