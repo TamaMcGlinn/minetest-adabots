@@ -533,6 +533,12 @@ local function get_energy_cost_for_movement_delta(delta)
   return adabots.config.horizontal_energy_cost
 end
 
+function TurtleEntity:get_players_above_bot()
+  local self_location = self.object:get_pos()
+  local above = vector.new(self_location.x, self_location.y + 1.0, self_location.z)
+  return get_players_at(above)
+end
+
 ---check the bot has enough energy for the given cost,
 ---return true if so. If necessary, and autoRefuel enabled,
 ---do that first. Return false if not able to get the required energy
@@ -1917,12 +1923,23 @@ function TurtleEntity:useEnergy(amount)
   return false
 end
 
+function TurtleEntity:turn_players_above(yaw_diff)
+  local players_above_bot = self:get_players_above_bot()
+  for _,player in ipairs(players_above_bot) do
+    local yaw = player:get_look_horizontal()
+    player:set_look_yaw(yaw + yaw_diff)
+  end
+end
+
 --- From 0 to 3
 function TurtleEntity:setHeading(heading)
   if not self:useEnergy(adabots.config.turn_energy_cost) then return false end
   heading = (tonumber(heading) or 0) % 4
   if self.heading ~= heading then
+    local old_heading = self.heading
     self.heading = heading
+    local yaw_diff = (self.heading - old_heading) * 3.14159265358979323 / 2
+    self:turn_players_above(yaw_diff)
     self.object:set_yaw(self.heading * 3.14159265358979323 / 2)
   end
   return true
