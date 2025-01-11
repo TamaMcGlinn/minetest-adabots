@@ -649,7 +649,6 @@ function TurtleEntity:increment_tool_uses()
   local tool_stack = self.toolinv:get_stack("toolmain", 1)
   local table = tool_stack:to_table()
   local wear_increment = tool_wear_rates[table.name]
-  minetest.debug("Wear: " .. table.wear)
   if table.wear > 65535 - wear_increment then
     -- tool is spent
     self.toolinv:set_stack("toolmain", 1, nil)
