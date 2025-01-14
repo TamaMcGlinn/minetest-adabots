@@ -279,6 +279,7 @@ minetest.register_on_player_receive_fields(
       return true
     elseif isForm(FORMNAME_TURTLE_CONTROLPANEL) then
       respond_to_common_controls()
+      if fields.close or fields.quit then turtle:stop_look_tracking(player_name) end
       if fields.arrow_forward then turtle:forward(true) end
       if fields.arrow_backward then turtle:back(true) end
       if fields.arrow_turnleft then turtle:turnLeft(true) end
@@ -292,6 +293,7 @@ minetest.register_on_player_receive_fields(
       if fields.place_up then turtle:placeUp(true) end
       if fields.place_down then turtle:placeDown(true) end
       if fields.open_inventory then
+        turtle:stop_look_tracking(player_name)
         turtle:open_inventory(player_name)
       end
       if fields.craft then
@@ -1686,11 +1688,87 @@ function TurtleEntity:trigger_hover_check()
   self.wait_since_last_hover_consume = 1
 end
 
+function TurtleEntity:start_look_tracking(player_name)
+  if self.players_look_tracking == nil then
+    self.players_look_tracking = {}
+  end
+  for _,name in ipairs(self.players_look_tracking) do
+    if name == player_name then
+      return
+    end
+  end
+  self.players_look_tracking[#self.players_look_tracking+1] = player_name
+  -- minetest.log("Players tracking: " .. dump(self.players_look_tracking))
+end
+
+function TurtleEntity:stop_look_tracking(player_name)
+  if self.players_look_tracking == nil then
+    return
+  end
+  for i, name in ipairs(self.players_look_tracking) do
+    if name == player_name then
+      table.remove(self.players_look_tracking, i)
+      break
+    end
+  end
+  -- minetest.log("Players tracking: " .. dump(self.players_look_tracking))
+end
+
+-- from https://github.com/minetest/minetest/issues/8868#issuecomment-526399859
+local function get_player_head_pos(player)
+  local pos = vector.add(player:get_pos(), player:get_eye_offset())
+  pos.y = pos.y + player:get_properties().eye_height
+  return pos
+end
+
+-- see also https://github.com/minetest/minetest/commit/fa0bbbf96df17f0d7911274ea85e5c049c20d07b
+-- the old player:get_look_yaw/pitch() are deprecated because they were quite broken
+local function make_player_look_at_position(player, pos)
+  local player_pos = get_player_head_pos(player)
+  local diff = pos - player_pos
+
+  -- horizontal angle (usually called yaw)
+  local new_horizontal_angle = (math.pi * 2) - math.atan(diff.x / diff.z)
+  if diff.z < 0 then
+    new_horizontal_angle = new_horizontal_angle + math.pi
+  end
+  player:set_look_horizontal(new_horizontal_angle)
+
+  -- to work out vertical angle, get arctangent of ydiff / horizontal distance
+  -- horizontal (xz) distance is the bottom line in atan triangle
+  local xz_dist = math.sqrt(diff.x * diff.x + diff.z * diff.z)
+  local new_vertical_angle = -math.atan(diff.y / xz_dist)
+  player:set_look_vertical(new_vertical_angle)
+end
+
+function TurtleEntity:make_player_look_at_bot(player)
+  local bot_pos = self:get_pos()
+  make_player_look_at_position(player, bot_pos)
+end
+
+function TurtleEntity:player_lookat_tick(dtime)
+  if not self.wait_since_last_player_lookat then self.wait_since_last_player_lookat = 0 end
+  self.wait_since_last_player_lookat = self.wait_since_last_player_lookat + dtime
+  if self.wait_since_last_player_lookat >= 0.2 then
+    self.wait_since_last_player_lookat = 0
+    if self.players_look_tracking == nil then
+      return
+    end
+    for _,player_name in ipairs(self.players_look_tracking) do
+      local p = minetest.get_player_by_name(player_name)
+      self:make_player_look_at_bot(p)
+    end
+  end
+end
+
 function TurtleEntity:on_step(dtime)
   if adabots.config.hover_energy_cost > 0 then
     self:hover_tick(dtime)
     self:ground_check_tick(dtime)
   end
+
+  self:player_lookat_tick(dtime)
+
   -- init to 0
   if not self.wait_since_last_step then self.wait_since_last_step = 0 end
 
@@ -2086,6 +2164,7 @@ function TurtleEntity:open_inventory(player_name)
 end
 
 function TurtleEntity:open_controlpanel(player_name)
+  self:start_look_tracking(player_name)
   self:open_form(player_name, FORMNAME_TURTLE_CONTROLPANEL)
 end
 
