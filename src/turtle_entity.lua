@@ -1,6 +1,7 @@
 -- override this by setting ADABOTS_PROXY_URL environment variable to your own proxy URL
 local INSTRUCTION_PROXY_URL = os.getenv("INSTRUCTION_PROXY_BASE_URL") or nil
 print("INSTRUCTION_PROXY_URL: " .. INSTRUCTION_PROXY_URL)
+local userId = os.getenv("USER_ID") or "undefined"
 
 local modname = minetest.get_current_modname()
 local modpath = minetest.get_modpath(modname)
@@ -1361,7 +1362,8 @@ local function post_instruction_result(server_url, workspaceId, result,
   bot_name, state_reset_functor)
   local set_result_options = {
     url = server_url .. "/patch?workspaceId=" .. workspaceId ..
-      "&botName=" .. bot_name .. "&returnValue=" .. result,
+      "&botName=" .. bot_name .. "&returnValue=" .. result ..
+      "&userId=" .. userId,
     method = "GET",
     timeout = 1
   }
@@ -1411,7 +1413,7 @@ function TurtleEntity:fetch_adabots_instruction()
   local workspaceId = self.workspace["id"]
   local fetch_options = {
     url = server_url .. "/get?workspaceId=" .. workspaceId .. "&botName=" ..
-      self.name,
+      self.name .. "&userId=" .. userId,
     method = "GET",
     timeout = 1
   }
