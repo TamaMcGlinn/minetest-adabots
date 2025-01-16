@@ -279,7 +279,7 @@ minetest.register_on_player_receive_fields(
       return true
     elseif isForm(FORMNAME_TURTLE_CONTROLPANEL) then
       respond_to_common_controls()
-      if fields.close or fields.quit then turtle:stop_look_tracking(player_name) end
+      if fields.close or fields.quit or fields.open_slotselect then turtle:stop_look_tracking(player_name) end
       if fields.arrow_forward then turtle:forward(true) end
       if fields.arrow_backward then turtle:back(true) end
       if fields.arrow_turnleft then turtle:turnLeft(true) end
