@@ -194,7 +194,7 @@ function adabots.find_empty_space_near(pos)
     local min = pos - distvec
     local max = pos + distvec
     local air_nodes, _ = minetest.find_nodes_in_area(min, max, {"air"}, false)
-    minetest.log("searching in distance " .. distance)
+    -- minetest.log("searching in distance " .. distance)
     for _,air_node in ipairs(air_nodes) do
       if not adabots.node_walkable(air_node) then
         return air_node
