@@ -7,5 +7,5 @@ adabots_horizontal_energy_cost (Energy cost to move forward/back [0 - 1000]) int
 adabots_upward_energy_cost (Energy cost to move upward [0 - 1000]) int 30
 adabots_downward_energy_cost (Energy cost to move downward [0 - 1000]) int 0
 adabots_hover_energy_cost (Energy cost per second to float [0 - 1000]) int 2
-adabots_build_energy_cost (Energy cost to build [0 - 1000]) int 20
-adabots_mine_energy_cost (Energy cost to mine [0 - 1000]) int 20
+adabots_build_energy_cost (Energy cost to build [0 - 1000]) int 10
+adabots_mine_energy_cost (Energy cost to mine [0 - 1000]) int 10
