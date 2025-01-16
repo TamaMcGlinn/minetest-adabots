@@ -2459,6 +2459,9 @@ function TurtleEntity:itemRefuel(turtleslot, amount)
     max_to_consume = slot_contents:get_count()
   end
   local energy_room = adabots.config.energy_max - self.energy
+  if energy_room == 0 then
+    return false
+  end
   local max_items_for_energy_room = math.floor(energy_room / energy_per_item)
   if max_items_for_energy_room == 0 then
     -- but still burn 1 item even if that would overflow the energy tank
