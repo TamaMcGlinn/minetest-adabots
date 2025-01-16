@@ -15,7 +15,6 @@ adabots = {
     upward_energy_cost = tonumber(minetest.settings:get("adabots_upward_energy_cost")) or 30,
     downward_energy_cost = tonumber(minetest.settings:get("adabots_downward_energy_cost")) or 0,
     hover_energy_cost = tonumber(minetest.settings:get("adabots_hover_energy_cost")) or 2,
-    think_energy_cost = tonumber(minetest.settings:get("adabots_think_energy_cost")) or 0,
     build_energy_cost = tonumber(minetest.settings:get("adabots_build_energy_cost")) or 20,
     mine_energy_cost = tonumber(minetest.settings:get("adabots_mine_energy_cost")) or 20,
   },
