@@ -1069,18 +1069,21 @@ function TurtleEntity:get_formspec_inventory(player_name)
   local turtle_name = "style_type[field;font_size=26]" ..
   "field[2.03,0.8;3,1;name;AdaBot name;" .. F(self.name) .. "]"
 
-  local fuel_level = math.min(math.max(0, self.energy / adabots.config.energy_max), 1)
-  local nonfull_fuel_images = 29
-  -- even linear distribution so that the max image has an equal range
-  local index = math.min(math.floor(fuel_level * (nonfull_fuel_images+1)), nonfull_fuel_images)
-  local fuelbutton_suffix = tostring(index)
-  local active = ""
-  if self.autoRefuel then
-    active = "active_"
+  local refueling = ""
+  if adabots.config.energy_cost_multiplier > 0 then
+    local fuel_level = math.min(math.max(0, self.energy / adabots.config.energy_max), 1)
+    local nonfull_fuel_images = 29
+    -- even linear distribution so that the max image has an equal range
+    local index = math.min(math.floor(fuel_level * (nonfull_fuel_images+1)), nonfull_fuel_images)
+    local fuelbutton_suffix = tostring(index)
+    local active = ""
+    if self.autoRefuel then
+      active = "active_"
+    end
+    local autorefuel_img = "image[0.98,3.38;1.04,1.04;button_" .. active .. "outline.png]"
+    local refuel_button = "image_button[1,3.4;1,0.96;refuel_" .. fuelbutton_suffix .. ".png;refuel;]tooltip[refuel;Refuel / toggle autoRefuel]"
+    refueling = autorefuel_img .. refuel_button
   end
-  local autorefuel_img = "image[0.98,3.38;1.04,1.04;button_" .. active .. "outline.png]"
-  local refuel_button = "image_button[1,3.4;1,0.96;refuel_" .. fuelbutton_suffix .. ".png;refuel;]tooltip[refuel;Refuel / toggle autoRefuel]"
-  local refueling = autorefuel_img .. refuel_button
 
   local playpause_button = "image_button[4,2.2;1,1;" .. playpause_image ..
   ";listen;]tooltip[listen;Start/stop listening]"
