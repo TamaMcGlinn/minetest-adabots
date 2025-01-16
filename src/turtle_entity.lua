@@ -427,7 +427,7 @@ end
 -- "walkable" actually means the player could stand on TOP of the node
 -- and not fall. So if it returns true, that means the bot cannot move
 -- into that node.
-local function node_walkable(nodeLocation)
+function adabots.node_walkable(nodeLocation)
   if nodeLocation == nil then
     minetest.debug("Error: testing nil node for walkability")
     return false
@@ -451,14 +451,14 @@ end
 -- and also the node above it
 local function player_can_stand_at(pos)
   local above = vector.new(pos.x, pos.y + 1, pos.z)
-  return not node_walkable(pos) and not node_walkable(above)
+  return not adabots.node_walkable(pos) and not adabots.node_walkable(above)
 end
 
 -- returns true if the bot could stand on top of that location
 -- i.e. either it is walkable by the player, or
 -- there are blocking objects there, or there is a player there
 local function bot_can_stand_on(pos)
-  if node_walkable(pos) then
+  if adabots.node_walkable(pos) then
     return true
   end
   local players_there = get_players_at(pos)
@@ -571,7 +571,7 @@ function TurtleEntity:move(nodeLocation)
   end
 
   -- Verify new pos is empty
-  if node_walkable(nodeLocation) then return false end
+  if adabots.node_walkable(nodeLocation) then return false end
   if not self:allowed_to_move_to(nodeLocation) then return false end
   -- check we have energy
   local movement_delta = nodeLocation - self.object:get_pos()
@@ -963,7 +963,7 @@ function TurtleEntity:suck_from_inventory_list_at(inventory, maxAmount, inventor
 end
 
 function TurtleEntity:detectnode(nodeLocation)
-  return node_walkable(nodeLocation)
+  return adabots.node_walkable(nodeLocation)
 end
 
 function TurtleEntity:get_inv_to_drop_into(item_name, node_name)
@@ -1787,6 +1787,7 @@ function TurtleEntity:start_updating_inventory(player_name)
     end
   end
   self.players_with_inventory_open[#self.players_with_inventory_open+1] = player_name
+  -- minetest.log("Players tracking inv: " .. dump(self.players_with_inventory_open))
 end
 
 function TurtleEntity:stop_updating_inventory(player_name)
@@ -1799,6 +1800,7 @@ function TurtleEntity:stop_updating_inventory(player_name)
       break
     end
   end
+  -- minetest.log("Players tracking inv: " .. dump(self.players_with_inventory_open))
 end
 
 function TurtleEntity:inventory_update_tick(dtime)
