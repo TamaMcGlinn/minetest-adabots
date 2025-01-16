@@ -252,6 +252,7 @@ minetest.register_on_player_receive_fields(
     end
     if isForm(FORMNAME_TURTLE_INVENTORY) then
       respond_to_common_controls()
+      if fields.close or fields.quit or fields.open_controlpanel or fields.access_control then turtle:stop_updating_inventory(player_name) end
       if fields.workspace then
         turtle:select_workspace(fields.workspace)
       end
@@ -1772,6 +1773,44 @@ function TurtleEntity:player_lookat_tick(dtime)
   end
 end
 
+function TurtleEntity:start_updating_inventory(player_name)
+  if self.players_with_inventory_open == nil then
+    self.players_with_inventory_open = {}
+  end
+  for _,name in ipairs(self.players_with_inventory_open) do
+    if name == player_name then
+      return
+    end
+  end
+  self.players_with_inventory_open[#self.players_with_inventory_open+1] = player_name
+end
+
+function TurtleEntity:stop_updating_inventory(player_name)
+  if self.players_with_inventory_open == nil then
+    return
+  end
+  for i, name in ipairs(self.players_with_inventory_open) do
+    if name == player_name then
+      table.remove(self.players_with_inventory_open, i)
+      break
+    end
+  end
+end
+
+function TurtleEntity:inventory_update_tick(dtime)
+  if not self.wait_since_last_inventory_update then self.wait_since_last_inventory_update = 0 end
+  self.wait_since_last_inventory_update = self.wait_since_last_inventory_update + dtime
+  if self.wait_since_last_inventory_update >= 0.2 then
+    self.wait_since_last_inventory_update = 0
+    if self.players_with_inventory_open == nil then
+      return
+    end
+    for _,player_name in ipairs(self.players_with_inventory_open) do
+      self:open_form(player_name, FORMNAME_TURTLE_INVENTORY)
+    end
+  end
+end
+
 function TurtleEntity:on_step(dtime)
   if adabots.config.hover_energy_cost > 0 then
     self:hover_tick(dtime)
@@ -1779,6 +1818,7 @@ function TurtleEntity:on_step(dtime)
   end
 
   self:player_lookat_tick(dtime)
+  self:inventory_update_tick(dtime)
 
   -- init to 0
   if not self.wait_since_last_step then self.wait_since_last_step = 0 end
@@ -2171,6 +2211,7 @@ function TurtleEntity:open_form(player_name, form_name)
 end
 
 function TurtleEntity:open_inventory(player_name)
+  self:start_updating_inventory(player_name)
   self:open_form(player_name, FORMNAME_TURTLE_INVENTORY)
 end
 
