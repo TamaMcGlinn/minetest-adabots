@@ -1451,7 +1451,18 @@ function TurtleEntity:get_formspec_slotselect()
     local tooltip =
     "tooltip[select_" .. i .. ";Select slot " .. i .. " (" ..
     stack_tooltip .. ")]"
-    slot_tiles = slot_tiles .. button .. tooltip
+    local amount = stack:get_count()
+    local itemcount = ""
+    if amount > 1 then
+      local amountstring = tostring(amount)
+      if amount < 10 then
+        -- move it over a little so it looks right-aligned
+        -- https://github.com/minetest/minetest/issues/7613
+        x = x + 0.18
+      end
+      itemcount = "label[" .. x + 0.5 .. "," .. y + 0.7 .. ";" .. amountstring ..  "]"
+    end
+    slot_tiles = slot_tiles .. button .. tooltip .. itemcount
   end
 
   return general_settings .. buttons .. slot_tiles .. turtle_selection
