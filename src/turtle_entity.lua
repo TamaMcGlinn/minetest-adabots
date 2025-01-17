@@ -1653,7 +1653,10 @@ function TurtleEntity:remove_pickaxe()
   if self.pickaxe ~= nil then self.pickaxe:remove() end
 end
 
-function TurtleEntity:on_deactivate() self:remove_pickaxe() end
+function TurtleEntity:on_deactivate()
+  minetest.log("error", "Bot " .. self.name .. " at " .. dump(self:get_pos()) .. " has deactivated")
+  self:remove_pickaxe()
+end
 
 function TurtleEntity:is_hovering()
   local pos = self:get_pos()
@@ -1823,6 +1826,8 @@ function TurtleEntity:inventory_update_tick(dtime)
 end
 
 function TurtleEntity:on_step(dtime)
+  minetest.forceload_block (self:get_pos(), true)
+
   if adabots.config.hover_energy_cost > 0 then
     self:hover_tick(dtime)
     self:ground_check_tick(dtime)
