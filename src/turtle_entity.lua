@@ -1732,6 +1732,7 @@ end
 
 -- from https://github.com/minetest/minetest/issues/8868#issuecomment-526399859
 local function get_player_head_pos(player)
+  if player == nil then return nil end
   local pos = vector.add(player:get_pos(), player:get_eye_offset())
   pos.y = pos.y + player:get_properties().eye_height
   return pos
@@ -1740,6 +1741,7 @@ end
 -- see also https://github.com/minetest/minetest/commit/fa0bbbf96df17f0d7911274ea85e5c049c20d07b
 -- the old player:get_look_yaw/pitch() are deprecated because they were quite broken
 local function make_player_look_at_position(player, pos)
+  if player == nil then return end
   local player_pos = get_player_head_pos(player)
   local diff = pos - player_pos
 
@@ -1758,6 +1760,7 @@ local function make_player_look_at_position(player, pos)
 end
 
 function TurtleEntity:make_player_look_at_bot(player)
+  if player == nil then return end
   local bot_pos = self:get_pos()
   make_player_look_at_position(player, bot_pos)
 end
@@ -1772,7 +1775,9 @@ function TurtleEntity:player_lookat_tick(dtime)
     end
     for _,player_name in ipairs(self.players_look_tracking) do
       local p = minetest.get_player_by_name(player_name)
-      self:make_player_look_at_bot(p)
+      if p ~= nil then
+        self:make_player_look_at_bot(p)
+      end
     end
   end
 end
