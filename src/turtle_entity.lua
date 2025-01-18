@@ -12,6 +12,17 @@ local modpath = minetest.get_modpath("adabots")
 local S = minetest.get_translator("adabots")
 local F = function (s) return minetest.formspec_escape(s) end
 
+-- copied from https://codeberg.org/MineClone/MineClone2/src/branch/master/mods/HUD/mcl_formspec
+local function get_itemslot_bg(x, y, w, h)
+	local out = ""
+	for i = 0, w - 1, 1 do
+		for j = 0, h - 1, 1 do
+			out = out .."image["..x+i..","..y+j..";1,1;mcl_formspec_itemslot.png]"
+		end
+	end
+	return out
+end
+
 -- https://stackoverflow.com/a/16077650/2144408
 local function deepcopy(o, seen)
   seen = seen or {}
@@ -1090,7 +1101,7 @@ function TurtleEntity:get_formspec_inventory(player_name)
 
   local tool_label =
   "label[0,2.95;Tool]"
-  local tool_bg = mcl_formspec.get_itemslot_bg(0, 3.4, 1, 1)
+  local tool_bg = get_itemslot_bg(0, 3.4, 1, 1)
   local tool_inventory_slot = "list[" .. self.toolinv_fullname ..
   ";toolmain;0,3.4;1,1;]"
   local tool = tool_label .. tool_bg .. tool_inventory_slot
@@ -1110,7 +1121,7 @@ function TurtleEntity:get_formspec_inventory(player_name)
 
   local turtle_inventory = "label[" .. turtle_inv_x .. "," .. turtle_inv_y -
   0.55 .. ";AdaBot Inventory]" ..
-  mcl_formspec.get_itemslot_bg(turtle_inv_x,
+  get_itemslot_bg(turtle_inv_x,
     turtle_inv_y, 4, 4)
 
   local turtle_selection = "background[" .. selected_x .. "," .. selected_y -
@@ -1122,8 +1133,8 @@ function TurtleEntity:get_formspec_inventory(player_name)
   ";4,4;]"
 
   local player_inventory = "label[0,4.5;Player Inventory]" ..
-  mcl_formspec.get_itemslot_bg(0, 5.0, 9, 3) ..
-  mcl_formspec.get_itemslot_bg(0, 8.24, 9, 1)
+  get_itemslot_bg(0, 5.0, 9, 3) ..
+  get_itemslot_bg(0, 8.24, 9, 1)
 
   local player_inventory_items = "list[current_player;main;0,5.0;9,3;9]" ..
   "list[current_player;main;0,8.24;9,1;0]"
