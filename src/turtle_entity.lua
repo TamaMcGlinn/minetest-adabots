@@ -1665,7 +1665,6 @@ function TurtleEntity:remove_pickaxe()
 end
 
 function TurtleEntity:on_deactivate()
-  minetest.log("error", "Bot " .. self.name .. " at " .. dump(self:get_pos()) .. " has deactivated")
   self:remove_pickaxe()
 end
 
