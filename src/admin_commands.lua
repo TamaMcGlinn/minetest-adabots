@@ -152,7 +152,7 @@ function adabots.list_bots(playername, bot_id, verbose, filter_own, filter_acces
   minetest.log("______________________________")
 end
 
--- returns the position of an air block at about 8 blocks distance from the player,
+-- returns the position of an air block at about 4 blocks distance from the player,
 -- such that there's no other bot or blocking object or player there
 -- extrapolated_position is optional and defaults to North. If specified, the
 -- returned position will be in that direction - pass the old bot location so that the
@@ -169,10 +169,10 @@ function adabots.get_position_near_player(player_name, extrapolated_position)
     return nil
   end
   if extrapolated_position == nil then
-    extrapolated_position = player_pos + vector.new(0, 0, 8)
+    extrapolated_position = player_pos + vector.new(0, 0, 4)
   else
     local diff = extrapolated_position - player_pos
-    local offset = vector.normalize(diff) * 8
+    local offset = vector.normalize(diff) * 4
     extrapolated_position = player_pos + offset
   end
   local pos = adabots.find_empty_space_near(extrapolated_position)
