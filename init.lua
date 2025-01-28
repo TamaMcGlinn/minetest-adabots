@@ -4,7 +4,7 @@ adabots = {
     -- This is how long timed turtle actions take, such as mining, moving, and placing
     turtle_tick = tonumber(minetest.settings:get("adabots_turtle_tick_time")) or .3,
     fuel_multiplier = tonumber(minetest.settings:get("adabots_fuel_multiplier")) or 12.0,
-    energy_cost_multiplier = tonumber(minetest.settings:get("adabots_energy_cost_multiplier")) or 1.0,
+    energy_cost_multiplier = tonumber(minetest.settings:get("adabots_energy_cost_multiplier")) or 0.0,
 
     -- Energy settings
     energy_initial = tonumber(minetest.settings:get("adabots_energy_initial")) or 2000,
