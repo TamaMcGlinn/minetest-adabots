@@ -124,7 +124,7 @@ function adabots.list_bots(playername, bot_id, verbose, filter_own, filter_acces
   for _,turtle in ipairs(adabots.turtles) do
     if bot_passes_filter(playername, turtle, bot_id, filter_own, filter_accessible, filter_listening) then
       local listening = "false"
-      if turtle.listening then listening = "true " end
+      if turtle.is_listening then listening = "true " end
       local workspace = ""
       if turtle.workspace ~= nil then
         workspace = turtle.workspace.name
