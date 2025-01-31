@@ -642,28 +642,30 @@ local function is_supported_tool(tool_info)
   return is_supported_toolname(tool_name)
 end
 
-local function get_tool_hardness(tool_info)
-  if not is_supported_tool(tool_info) then return 0 end
-  local capabilities = tool_info["tool_capabilities"]
-  if capabilities == nil then return 0 end
-  return capabilities["max_drop_level"]
-end
-
-local function get_node_hardness(node)
-  local node_name = node.name
-  local node_registration = minetest.registered_nodes[node_name]
-  local hardness = node_registration["_mcl_hardness"]
-  if hardness == nil then return 0 end
-  return math.floor(hardness)
-end
+-- local function get_tool_hardness(tool_info)
+--   if not is_supported_tool(tool_info) then return 0 end
+--   local capabilities = tool_info["tool_capabilities"]
+--   if capabilities == nil then return 0 end
+--   return capabilities["max_drop_level"]
+-- end
+--
+-- local function get_node_hardness(node)
+--   local node_name = node.name
+--   local node_registration = minetest.registered_nodes[node_name]
+--   local hardness = node_registration["_mcl_hardness"]
+--   if hardness == nil then return 0 end
+--   return math.floor(hardness)
+-- end
 
 function TurtleEntity:pickaxe_can_dig(node)
   local tool_info = self:getToolInfo()
   if tool_info == nil then return false end
-  local tool_hardness = get_tool_hardness(tool_info)
-  local node_hardness = get_node_hardness(node)
-  -- minetest.debug("Tool: " .. tool_hardness .. " vs node: " .. node_hardness)
-  return tool_hardness >= node_hardness
+  return true
+  -- for some reason silver is set to hardness 4, above all pickaxes
+  -- so nevermind this
+  -- local tool_hardness = get_tool_hardness(tool_info)
+  -- local node_hardness = get_node_hardness(node)
+  -- return tool_hardness >= node_hardness
 end
 
 function TurtleEntity:increment_tool_uses()
