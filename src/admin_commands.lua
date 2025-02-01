@@ -3,7 +3,14 @@ minetest.register_privilege("adabots_admin", {
   give_to_singleplayer = true
 })
 
-minetest.register_chatcommand( "adabots_list_settings", {
+adabots.chat_commands = {}
+
+local function register_adabots_chat_command(name, def)
+  minetest.register_chatcommand(name, def)
+  adabots.chat_commands[#adabots.chat_commands+1] = name
+end
+
+register_adabots_chat_command( "adabots_list_settings", {
   description = "List AdaBots admin settings",
   params = '',
   privs = {},
@@ -17,7 +24,7 @@ minetest.register_chatcommand( "adabots_list_settings", {
   end
 } )
 
-minetest.register_chatcommand( "adabots_set", {
+register_adabots_chat_command( "adabots_set", {
   description = "Change AdaBots admin setting",
   params = '<settingname> <value>',
   privs = { adabots_admin = true },
@@ -38,7 +45,7 @@ minetest.register_chatcommand( "adabots_set", {
   end
 } )
 
-minetest.register_chatcommand( "adabots_list_bots", {
+register_adabots_chat_command( "adabots_list_bots", {
   description = "List bots",
   params = '[--verbose] [--own/--accessible] [bot_id]',
   privs = { adabots_admin = true },
@@ -77,13 +84,13 @@ minetest.register_chatcommand( "adabots_list_bots", {
   end
 } )
 
-minetest.register_chatcommand( "adabots_bot_cmd", {
+register_adabots_chat_command( "adabots_bot_cmd", {
   description = "Remotely operate bot",
   params = '<bot_id|all> <cmdname> [values...]',
   privs = { adabots_admin = true },
   func = function( player_name, param )
     local args = string.split( param, " " )
-    local usage_info = "Usage: /adabots_bot_cmd <bot_id|all> <cmdname> [values...]. E.g. /adabots_bot_cmd all stoplisten (see /adabots_list_bots)"
+    local usage_info = "Usage: /adabots_bot_cmd <bot_id|all> <cmdname> [values...]. E.g. /adabots_bot_cmd all stoplisten (see /adabots_list_bots and /adabots_list_cmds)"
     if #args < 2 then
       return false, usage_info
     end
@@ -100,6 +107,26 @@ minetest.register_chatcommand( "adabots_bot_cmd", {
       cmd_args = {unpack(args, 3)}
     end
     return adabots.bot_cmd(player_name, bot_id, cmd, cmd_args)
+  end
+} )
+
+register_adabots_chat_command( "adabots_list_cmds", {
+  description = "List bot cmds",
+  params = '',
+  privs = {},
+  func = function( _, param )
+    local args = string.split( param, " " )
+    if #args > 0 then
+      return false, "/adabots_list_cmds does not take arguments, did you mean /adabots_bot_cmd ?"
+    end
+    minetest.log("Chat commands:")
+    for i,cmd in ipairs(adabots.chat_commands) do
+      minetest.log("/" .. cmd)
+    end
+    minetest.log("Bot commands to run with /adabots_bot_cmd:")
+    for cmd,_ in pairs(adabots.bot_cmds) do
+      minetest.log("/adabots_bot_cmd <bot_id|all> " .. cmd)
+    end
   end
 } )
 
@@ -205,28 +232,34 @@ function adabots.find_empty_space_near(pos)
   return nil
 end
 
+adabots.bot_cmds = {}
+adabots.bot_cmds["stoplisten"] = function (_, turtle, _)
+  turtle:update_is_listening(false)
+  return true
+end
+
+adabots.bot_cmds["listen"] = function (_, turtle, _)
+  turtle:update_is_listening(true)
+  return true
+end
+
+adabots.bot_cmds["bring"] = function (player_name, turtle, _)
+  local new_pos = adabots.get_position_near_player(player_name, turtle:get_pos())
+  if new_pos == nil then
+    return false, "Unable to find suitable place to jump to"
+  else
+    turtle.object:move_to(new_pos, false)
+    return true
+  end
+end
+
+adabots.bot_cmds["control"] = function (player_name, turtle, _)
+  turtle:open_controlpanel(player_name)
+  return true
+end
+
 function adabots.single_bot_cmd(player_name, turtle, cmd, cmd_args)
-  if cmd == "stoplisten" then
-    turtle:update_is_listening(false)
-    return true
-  end
-  if cmd == "listen" then
-    turtle:update_is_listening(true)
-    return true
-  end
-  if cmd == "bring" then
-    local new_pos = adabots.get_position_near_player(player_name, turtle:get_pos())
-    if new_pos == nil then
-      return false, "Unable to find suitable place to jump to"
-    else
-      turtle.object:move_to(new_pos, false)
-      return true
-    end
-  end
-  if cmd == "control" then
-    turtle:open_controlpanel(player_name)
-    return true
-  end
+  return adabots.bot_cmds[cmd](player_name, turtle, cmd_args)
 end
 
 function adabots.bot_cmd(player_name, bot_id, cmd, cmd_args)
