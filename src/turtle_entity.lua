@@ -14,13 +14,13 @@ local F = function (s) return minetest.formspec_escape(s) end
 
 -- copied from https://codeberg.org/MineClone/MineClone2/src/branch/master/mods/HUD/mcl_formspec
 local function get_itemslot_bg(x, y, w, h)
-	local out = ""
-	for i = 0, w - 1, 1 do
-		for j = 0, h - 1, 1 do
-			out = out .."image["..x+i..","..y+j..";1,1;mcl_formspec_itemslot.png]"
-		end
-	end
-	return out
+  local out = ""
+  for i = 0, w - 1, 1 do
+    for j = 0, h - 1, 1 do
+      out = out .."image["..x+i..","..y+j..";1,1;mcl_formspec_itemslot.png]"
+    end
+  end
+  return out
 end
 
 -- https://stackoverflow.com/a/16077650/2144408
@@ -103,7 +103,8 @@ local supported_tools = {
   "mcl_tools:pick_wood", "mcl_tools:pick_stone", "mcl_tools:pick_iron",
   "mcl_tools:pick_gold", "mcl_tools:pick_diamond",
   "default:pick_wood", "default:pick_stone", "default:pick_steel",
-  "default:pick_bronze", "default:pick_mese", "default:pick_diamond"
+  "default:pick_bronze", "default:pick_mese", "default:pick_diamond",
+  "moreores:pick_mithril", "moreores:pick_silver", "ethereal:pick_crystal"
 }
 
 local furnace_node_types = {
@@ -125,7 +126,10 @@ local tool_usages = {
   ["default:pick_steel"] = 180,
   ["default:pick_bronze"] = 180,
   ["default:pick_mese"] = 540,
-  ["default:pick_diamond"] = 810
+  ["default:pick_diamond"] = 810,
+  ["moreores:pick_mithril"] = 1600,
+  ["moreores:pick_silver"] = 380,
+  ["ethereal:pick_crystal"] = 1200
 }
 local tool_wear_rates = {}
 for i = 1, #supported_tools do
@@ -2627,6 +2631,12 @@ register_or_override_entity("adabots:pick_mese",
   set_pickaxe_properties("pick_mese.png"))
 register_or_override_entity("adabots:pick_diamond",
   set_pickaxe_properties("pick_diamond.png"))
+register_or_override_entity("adabots:pick_mithril",
+  set_pickaxe_properties("pick_mithril.png"))
+register_or_override_entity("adabots:pick_silver",
+  set_pickaxe_properties("pick_silver.png"))
+register_or_override_entity("adabots:pick_crystal",
+  set_pickaxe_properties("pick_ethereal_crystal.png"))
 
 minetest.register_privilege("adabots_override_bot_lock", {
   description = "Can access other player's bots without their permission.",
