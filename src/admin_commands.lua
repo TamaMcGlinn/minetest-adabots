@@ -211,6 +211,16 @@ function adabots.get_position_near_player(player_name, extrapolated_position)
   return pos
 end
 
+function adabots.get_position_near_bot(turtle)
+  local turtle_pos = turtle:get_pos()
+  if turtle_pos == nil then
+    minetest.log("error", "Bot " .. turtle.name .. ":get_pos() returned nil")
+    return nil
+  end
+  return adabots.find_empty_space_near(turtle_pos)
+end
+
+
 -- returns nearest air block to pos that isn't already occupied by a bot
 -- or blocking entity (e.g. horses, players)
 function adabots.find_empty_space_near(pos)
@@ -256,6 +266,21 @@ end
 adabots.bot_cmds["control"] = function (player_name, turtle, _)
   turtle:open_controlpanel(player_name)
   return true
+end
+
+adabots.bot_cmds["teleport_to"] = function (player_name, turtle, _)
+  if not minetest.check_player_privs(player_name, {teleport=true}) then
+    return false, "Player " .. player_name .. " does not have permission to teleport"
+  end
+  local player = minetest.get_player_by_name(player_name)
+  if player == nil then
+    return false, "No player named " .. player_name .. " found."
+  end
+  local location = adabots.get_position_near_bot(turtle)
+  if location == nil then
+    return false, "No location found near bot " .. turtle.name
+  end
+  player:set_pos(location)
 end
 
 function adabots.single_bot_cmd(player_name, turtle, cmd, cmd_args)
