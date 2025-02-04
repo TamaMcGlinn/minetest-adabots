@@ -212,6 +212,9 @@ function adabots.get_position_near_player(player_name, extrapolated_position)
 end
 
 function adabots.get_position_near_bot(turtle)
+  if turtle == nil then
+    return nil
+  end
   local turtle_pos = turtle:get_pos()
   if turtle_pos == nil then
     minetest.log("error", "Bot " .. turtle.name .. ":get_pos() returned nil")
@@ -268,19 +271,42 @@ adabots.bot_cmds["control"] = function (player_name, turtle, _)
   return true
 end
 
-adabots.bot_cmds["teleport_to"] = function (player_name, turtle, _)
-  if not minetest.check_player_privs(player_name, {teleport=true}) then
-    return false, "Player " .. player_name .. " does not have permission to teleport"
+adabots.next_teleport_to_time = nil
+
+function adabots.teleport_to_bot(player, turtle)
+  if player == nil then
+    return
   end
+  local location = adabots.get_position_near_bot(turtle)
+  if location == nil then
+    return
+  end
+  player:set_pos(location)
+end
+
+local BOT_TELEPORT_INTERVAL = 5.0 * 1000 * 1000
+
+adabots.bot_cmds["teleport_to"] = function (player_name, turtle, _)
   local player = minetest.get_player_by_name(player_name)
   if player == nil then
     return false, "No player named " .. player_name .. " found."
   end
-  local location = adabots.get_position_near_bot(turtle)
-  if location == nil then
-    return false, "No location found near bot " .. turtle.name
+  if not minetest.check_player_privs(player_name, {teleport=true}) then
+    return false, "Player " .. player_name .. " does not have permission to teleport"
   end
-  player:set_pos(location)
+  if adabots.next_teleport_to_time == nil then adabots.next_teleport_to_time = 0 end
+  local current_time = minetest.get_us_time()
+  if current_time > adabots.next_teleport_to_time then
+    adabots.next_teleport_to_time = current_time + BOT_TELEPORT_INTERVAL
+    adabots.teleport_to_bot(player, turtle)
+  else
+    local postpone = (adabots.next_teleport_to_time - current_time) / (1000 * 1000)
+    minetest.after(postpone, function()
+      adabots.teleport_to_bot(player, turtle)
+    end)
+    adabots.next_teleport_to_time = adabots.next_teleport_to_time + BOT_TELEPORT_INTERVAL
+  end
+  return true
 end
 
 function adabots.single_bot_cmd(player_name, turtle, cmd, cmd_args)
