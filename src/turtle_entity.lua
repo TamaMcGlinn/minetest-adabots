@@ -616,7 +616,7 @@ end
 function TurtleEntity:move(nodeLocation)
   -- disallow movement while falling
   local acceleration = self.object:get_acceleration()
-  if acceleration.y < -0.1 then
+  if acceleration == nil or acceleration.y < -0.1 then
     return false
   end
 
