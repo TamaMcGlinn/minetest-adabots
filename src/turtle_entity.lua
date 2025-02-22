@@ -403,6 +403,41 @@ function TurtleEntity:setTurtleslot(turtleslot, stack)
   return true
 end
 
+local function contains(list, x)
+  for _, v in pairs(list) do if v == x then return true end end
+  return false
+end
+
+local function is_supported_toolname(tool_name)
+  if not contains(supported_tools, tool_name) then
+    return false
+  end
+  return true
+end
+
+local function is_supported_tool(tool_info)
+  local tool_name = tool_info["name"]
+  return is_supported_toolname(tool_name)
+end
+
+function TurtleEntity:equip_tool(turtleslot)
+  if turtleslot == 0 then turtleslot = self.selected_slot end
+  if not isValidInventoryIndex(turtleslot) then return false end
+  local stack = self:getTurtleslot(turtleslot)
+  if stack == nil then
+    return false
+  end
+  if stack:is_empty() then return false end
+
+  if not is_supported_tool(stack:to_table()) then
+    return false
+  end
+  self.toolinv:set_stack("toolmain", 1, stack)
+  self.inv:set_stack("main", turtleslot, ItemStack(""))
+  self:add_pickaxe_model()
+  return true
+end
+
 function TurtleEntity:getToolInfo()
   local tool_stack = self.toolinv:get_stack("toolmain", 1)
   if tool_stack == nil then return nil end
@@ -619,31 +654,12 @@ function TurtleEntity:move(nodeLocation)
   return true
 end
 
-local function contains(list, x)
-  for _, v in pairs(list) do if v == x then return true end end
-  return false
-end
-
-local function is_supported_toolname(tool_name)
-  if not contains(supported_tools, tool_name) then
-    minetest.debug("Error: " .. tool_name ..
-      " is not a supported Adabots turtle tool")
-    return false
-  end
-  return true
-end
-
 local function get_remaining_uses(tool_name, wear_value)
   if not is_supported_toolname(tool_name) then return 0 end
   local total_uses = tool_usages[tool_name]
   local single_use = tool_wear_rates[tool_name]
   local spent_uses = round(wear_value / single_use)
   return total_uses - spent_uses
-end
-
-local function is_supported_tool(tool_info)
-  local tool_name = tool_info["name"]
-  return is_supported_toolname(tool_name)
 end
 
 -- local function get_tool_hardness(tool_info)
@@ -2270,7 +2286,7 @@ local function is_command_approved(turtle_command)
     if turtle_command == "turtle." .. dc .. "()" then return true end
   end
   local single_number_commands = {
-    "select", "getItemCount", "craft", "getItemDetail"
+    "select", "getItemCount", "craft", "getItemDetail", "equip_tool"
   }
   for _, snc in pairs(single_number_commands) do
     if turtle_command:find("^turtle%." .. snc .. "%( *%d+%)$") ~= nil then
