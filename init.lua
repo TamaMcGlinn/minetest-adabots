@@ -2,7 +2,8 @@ adabots = {
   config = {
     -- Turtles are yielded after every instruction
     -- This is how long timed turtle actions take, such as mining, moving, and placing
-    turtle_tick = tonumber(minetest.settings:get("adabots_turtle_tick_time")) or .1,
+    turtle_tick = tonumber(minetest.settings:get("adabots_turtle_tick")) or .1,
+    max_look_distance = tonumber(minetest.settings:get("adabots_max_look_distance")) or 10,
     fuel_multiplier = tonumber(minetest.settings:get("adabots_fuel_multiplier")) or 12.0,
     energy_cost_multiplier = tonumber(minetest.settings:get("adabots_energy_cost_multiplier")) or 0.0,
 
@@ -55,10 +56,12 @@ function adabots.change_setting(setting_name, new_value)
   range_restrict(setting_name)
 end
 
+set_range("turtle_tick", 0.001, 5.0)
+set_range("max_look_distance", 0, 100)
 set_range("fuel_multiplier", 0, 1000)
 set_range("energy_cost_multiplier", 0, 10)
 set_range("energy_max", 100, 1000000)
-set_range("energy_initial", 0, adabots.config.energy_max)
+set_range("energy_initial", 0, 1000000)
 set_range("turn_energy_cost", 0, 1000)
 set_range("horizontal_energy_cost", 0, 1000)
 set_range("upward_energy_cost", 0, 1000)

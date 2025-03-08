@@ -847,6 +847,210 @@ function TurtleEntity:inspectnode(nodeLocation)
   return result.name
 end
 
+local function to_integer_json(obj)
+  local raw_string_result = minetest.write_json(obj)
+  if raw_string_result == nil then
+    minetest.log("error", "write_json returned nil")
+    return "[]"
+  end
+  -- replace all .0 with nothing
+  local integerified_string = string.gsub(raw_string_result, '%.0', '')
+  return integerified_string
+end
+
+local function include_in_look_result(node, underwater)
+  if node.drawtype == nil then
+    return false
+  end
+  local current_medium = {
+    ["liquid"] = underwater, ["flowingliquid"] = underwater, ["airlike"] = not underwater
+  }
+  if current_medium[node.drawtype] == nil then
+    return true
+  else
+    return not current_medium[node.drawtype]
+  end
+end
+
+local function blocks_light(node, underwater)
+  if node.drawtype == nil then
+    return true
+  end
+  local blocking_types = {
+    ["normal"] = true, ["nodebox"] = true, ["mesh"] = true, ["liquid"] = not underwater, ["flowingliquid"] = not underwater, ["airlike"] = underwater
+  }
+  return blocking_types[node.drawtype]
+end
+
+-- look in a pyramid shape in the direction of the first_block
+function TurtleEntity:look_dir(first_block, distance)
+  if distance > adabots.config.max_look_distance then
+    distance = adabots.config.max_look_distance
+  end
+  local offset = first_block - self:get_pos()
+  local other_dirs = {}
+  if offset.x == 0 then
+    other_dirs[#other_dirs + 1] = vector.new(1, 0, 0)
+  end
+  if offset.z == 0 then
+    other_dirs[#other_dirs + 1] = vector.new(0, 0, 1)
+  end
+  -- y is vertical; we do it last so it is always the 2nd option
+  -- when we're looking horizontally
+  if offset.y == 0 then
+    other_dirs[#other_dirs + 1] = vector.new(0, 1, 0)
+  end
+  assert(#other_dirs == 2, "look_dir expected a block directly in front, above or below")
+
+  -- we will now convert the position offset in absolute x,y,z worldcoordinate terms
+  -- to coordinates (forwards, up/down, to-the-right)
+
+  --                (north)
+  --                  +Z
+  --                   |
+  --      (west) -X -- + -- +X (east)
+  --                   |
+  --                  -Z
+  --                (south)
+
+  --      when we are looking horizontally, v * other_dirs[2] is going to be the vertical, so this
+  --      goes in the middle (y) coordinate, and:
+  --         when looking north,     offset = ( 0,0, 1) and to the right is indeed + so we want u as-is
+  --         but when looking south, offset = ( 0,0,-1) and to the right is - so we want u flipped
+  --         when looking west,      offset = (-1,0, 0) and to the right is + so positive u becomes positive z
+  --         when looking east,      offset = ( 1,0, 0) and to the right is - so u should be flipped
+  --         so we multiply u by the look dir's (z - x); it is 1 when we want u as-is but -1 when we want it flipped
+  --         and the relative_position will be horizontal_part = (d, v, u*(z-x))
+  --      since this only works when y == 0 we multiply by that boolean expression
+
+  -- on the other hand, if we are looking up/down, then d is the vertical component, and u and v will map to forwards/right
+  -- differently depending on the direction we're facing.
+  -- the y component of offset is now the look direction (up or down) while the others are the direction the bot is facing
+  -- U means +x and V means +z in absolute terms, but this can be forwards/back/left/right depending on our direction:
+  --       when facing north,     offset = ( 0,y, 1) u => right, v => forwards
+  --       but when facing south, offset = ( 0,y,-1) u => left, v => back
+  --                 (v*z, d*y, u*z)
+  --       when facing west,      offset = (-1,y, 0) u => back, v => right
+  --       when facing east,      offset = ( 1,y, 0) u => forward, v => left
+  --                 (u*x, d*y, v*(-x))
+  -- to combine these we again multiply by the boolean expression, whether x or z are 0 respectively:
+  -- (v*z, d*y, u*z) * (x==0)   +    (u*x, d*y, v*(-x)) * (z==0)
+  -- and we can split that out since the centre is the same, to:
+  -- vertical_part = (v*z*(x==0)+u*x*(z==0), d*y, u*z*(x==0)+v*(-x)*(z==0))
+
+  -- the entire multiplier is (horizontal_part * (y==0) + vertical_part + (y~=0)), where always only one of those is non-zero:
+  --             (d, v, u*(z-x)) * (y==0)       +          (v*z*(x==0)+u*x*(z==0), d*y, u*z*(x==0)+v*(-x)*(z==0)) * (y~=0)
+  -- and we can split it out into one expression - note that for y, it would be redundant to multiply by (y~=0) now:
+  -- (d*(y==0) + (v*z*(x==0)+u*x*(z==0))*(y~=0), v*(y==0) + d*y, u*(z-x)*(y==0) + (u*z*(x==0)+v*(-x)*(z==0))*(y~=0))
+  -- this equation is in to_local()
+
+  local faceDir = self:getHeadingOffset()
+  if faceDir == nil then return "[]" end
+  local x = faceDir.x
+  local z = faceDir.z
+  -- minetest.log("Facing: " .. dump(faceDir))
+  -- minetest.log("Looking: " .. dump(offset))
+  local to_local = function(d,u,v)
+    local y = offset.y
+    local b = function(val) if val then return 1 else return 0 end end
+    -- e.g. if x,y,z = 1,-1,0 (looking down, facing north), d,u,v = 8,2,1 the result is (8*0+1*0*0+2*1*1*1)
+    -- minetest.log("d,u,v: " .. tostring(d) .. "," .. tostring(u) .. "," .. tostring(v))
+    return vector.new(d*b(y==0)+(v*z*b(x==0)+u*x*b(z==0))*b(y~=0), -- forwards
+      v*b(y==0)+d*y,                                               -- up
+      u*(z-x)*b(y==0)+(u*z*b(x==0)+v*(-x)*b(z==0))*b(y~=0)         -- right
+    )
+  end
+
+  -- certain blocktypes block light, like dirt and wood, but not air, glass, glass panes
+  -- as we go further from the bot, we maintain a map of u,v (up/down,left/right) coordinates
+  -- that were blocked on the previous iteration. When light is blocked on the edge of the
+  -- cone of visibility, the next layer deeper gets an extra blocked coordinate, for example:
+  --                            _ _ _ _ _
+  --     _  _  _                _ _ _ _ _     note on this new layer there could
+  --     _  X  X    leads to:   _ _ X X X     be additional nodes blocked, but the
+  --     X  _  _                X X _ _ _     X's here will not even be checked,
+  --                            X X _ _ _     since the previous layer blocked them
+
+  -- we add to the new opaque mask while using opaque_mask
+  local opaque_mask = {}
+  local new_opaque_mask = {}
+
+  local add_to_mask = function(u,v)
+    local dict = new_opaque_mask[u]
+    if dict == nil then
+      new_opaque_mask[u] = {}
+      dict = new_opaque_mask[u]
+    end
+    dict[v] = true
+  end
+
+  local is_masked = function(d,arg_u,arg_v)
+    local u = arg_u
+    local v = arg_v
+    if math.abs(u) == d then
+      -- on edge, e.g. u = -3 and d = 3
+      local unit_dir = u / math.abs(u) -- -1 or 1 with same sign as u
+      u = u - unit_dir -- one less, toward centre
+    end
+    if math.abs(v) == d then
+      -- on edge, e.g. v = -3 and d = 3
+      local unit_dir = v / math.abs(v) -- -1 or 1 with same sign as u
+      v = v - unit_dir -- one less, toward centre
+    end
+    local dict = opaque_mask[u]
+    if dict == nil then
+      return false
+    end
+    if dict[v] == nil then
+      return false
+    end
+    -- blocked! so if we're on the edge we need to add to next layer
+    if u ~= arg_u or v ~= arg_v then
+      add_to_mask(arg_u,arg_v)
+    end
+    return true
+  end
+
+  local swap_masks = function()
+    opaque_mask = new_opaque_mask
+    new_opaque_mask = deepcopy(opaque_mask)
+  end
+
+  local bot_is_underwater = false
+  -- the centre of the slice at that distance
+  local centre = self:get_pos()
+  local result = {}
+  for d = 1, distance do
+    centre = centre + offset
+    for u = -d, d do
+      for v = -d, d do
+        if is_masked(d,u,v) then
+          goto continue
+        end
+        local absolute_offset = u * other_dirs[1] + v * other_dirs[2]
+        local loc = centre + absolute_offset
+        local node = minetest.get_node(loc)
+        local node_registration = minetest.registered_nodes[node.name]
+        if blocks_light(node_registration, bot_is_underwater) then
+          minetest.log("blocks light: " .. node.name .. " drawtype: " .. dump(node_registration.drawtype))
+          add_to_mask(u,v)
+        end
+        if include_in_look_result(node_registration, bot_is_underwater) then
+          minetest.log("included: " .. node.name .. " drawtype: " .. dump(node_registration.drawtype))
+          local relative_position = to_local(d,u,v)
+          result[#result + 1] = {relative_position, node.name}
+        end
+        ::continue::
+      end
+    end
+    swap_masks()
+  end
+  if #result == 0 then
+    return "[]"
+  end
+  return to_integer_json(result)
+end
+
 -- Get items loose in the world, up to maxAmount (pass 0 for infinite)
 -- Put them into the turtle inventory at the first viable location starting
 -- from the selected slot.
@@ -2034,8 +2238,46 @@ function TurtleEntity:get_staticdata()
   end
   return minetest.serialize(data)
 end
+
 -- MAIN PLAYER INTERFACE (CALL THESE)------------------------------------------
 function TurtleEntity:get_pos() return self.object:get_pos() end
+
+-- API version, returning string
+function TurtleEntity:getPosition()
+  return to_integer_json(self:get_pos())
+end
+
+function TurtleEntity:getDirection()
+  local heading = self:getHeading()
+  if heading % 4 == 0 then
+    return "south"
+  end
+  if heading % 4 == 1 then
+    return "east"
+  end
+  if heading % 4 == 2 then
+    return "north"
+  end
+  if heading % 4 == 3 then
+    return "west"
+  end
+end
+
+function TurtleEntity:getHeadingOffset()
+  local heading = self:getHeading()
+  if heading % 4 == 0 then
+    return vector.new(0,0,-1)
+  end
+  if heading % 4 == 1 then
+    return vector.new(1,0,0)
+  end
+  if heading % 4 == 2 then
+    return vector.new(0,0,1)
+  end
+  if heading % 4 == 3 then
+    return vector.new(-1,0,0)
+  end
+end
 
 function TurtleEntity:getLocRelative(numForward, numUp, numRight)
   local pos = self:get_pos()
@@ -2174,6 +2416,10 @@ function TurtleEntity:inspect() return self:inspectnode(self:getLocForward()) en
 function TurtleEntity:inspectUp() return self:inspectnode(self:getLocUp()) end
 function TurtleEntity:inspectDown() return self:inspectnode(self:getLocDown()) end
 
+function TurtleEntity:look(distance) return self:look_dir(self:getLocForward(), distance) end
+function TurtleEntity:lookUp(distance) return self:look_dir(self:getLocUp(), distance) end
+function TurtleEntity:lookDown(distance) return self:look_dir(self:getLocDown(), distance) end
+
 function TurtleEntity:suck(max_amount)
   return self:sucknode(self:getLocForward(), max_amount)
 end
@@ -2280,7 +2526,7 @@ local function is_command_approved(turtle_command)
   local direct_commands = {
     "forward", "turnLeft", "turnRight", "back", "up", "down",
     "getSelectedSlot", "detectLeft", "detectRight", "getCurrentTool",
-    "getItemDetail"
+    "getItemDetail", "getDirection", "getPosition"
   }
   for _, dc in pairs(direct_commands) do
     if turtle_command == "turtle." .. dc .. "()" then return true end
@@ -2301,7 +2547,7 @@ local function is_command_approved(turtle_command)
       if turtle_command:find(pattern) ~= nil then return true end
     end
   end
-  local single_number_location_commands = {"drop", "suck"}
+  local single_number_location_commands = {"drop", "suck", "look"}
   for _, snlc in pairs(single_number_location_commands) do
     for _, loc in pairs(locations) do
       local pattern = "^turtle%." .. snlc .. loc .. "%( *%d+%)$"

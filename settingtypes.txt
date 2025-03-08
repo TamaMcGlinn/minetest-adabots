@@ -1,3 +1,5 @@
+adabots_turtle_tick (Seconds between instructions for each bot [0.001 - 5.0]) float 0.1
+adabots_max_look_distance (Maximum bot view distance [0-100]) int 10
 adabots_fuel_multiplier (Multiplier for fuel [0 - 1000]) float 12.0
 adabots_energy_initial (Initial bot energy [0 - energy_max]) int 2000
 adabots_energy_cost_multiplier (Energy cost multiplier [0 - 10.0]) float 0.0
