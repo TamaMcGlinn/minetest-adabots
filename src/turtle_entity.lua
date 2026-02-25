@@ -403,16 +403,8 @@ function TurtleEntity:setTurtleslot(turtleslot, stack)
   return true
 end
 
-local function contains(list, x)
-  for _, v in pairs(list) do if v == x then return true end end
-  return false
-end
-
 local function is_supported_toolname(tool_name)
-  if not contains(supported_tools, tool_name) then
-    return false
-  end
-  return true
+  return supported_tools[tool_name] ~= nil
 end
 
 local function is_supported_tool(tool_info)
