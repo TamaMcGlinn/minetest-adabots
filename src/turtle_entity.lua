@@ -100,11 +100,40 @@ local turtle_forms = {
   }
 }
 local supported_tools = {
-  "mcl_tools:pick_wood", "mcl_tools:pick_stone", "mcl_tools:pick_iron",
-  "mcl_tools:pick_gold", "mcl_tools:pick_diamond",
-  "default:pick_wood", "default:pick_stone", "default:pick_steel",
-  "default:pick_bronze", "default:pick_mese", "default:pick_diamond",
-  "moreores:pick_mithril", "moreores:pick_silver", "ethereal:pick_crystal"
+  -- MineClone II / MineClone 5 picks
+  ["mcl_tools:pick_wood"] = {type = "pick", uses = 30},
+  ["mcl_tools:pick_stone"] = {type = "pick", uses = 60},
+  ["mcl_tools:pick_iron"] = {type = "pick", uses = 180},
+  ["mcl_tools:pick_gold"] = {type = "pick", uses = 20},
+  ["mcl_tools:pick_diamond"] = {type = "pick", uses = 810},
+
+  -- Minetest Game picks
+  ["default:pick_wood"] = {type = "pick", uses = 30},
+  ["default:pick_stone"] = {type = "pick", uses = 60},
+  ["default:pick_steel"] = {type = "pick", uses = 180},
+  ["default:pick_bronze"] = {type = "pick", uses = 180},
+  ["default:pick_mese"] = {type = "pick", uses = 540},
+  ["default:pick_diamond"] = {type = "pick", uses = 810},
+
+  -- Extra pick support
+  ["moreores:pick_mithril"] = {type = "pick", uses = 1600},
+  ["moreores:pick_silver"] = {type = "pick", uses = 380},
+  ["ethereal:pick_crystal"] = {type = "pick", uses = 1200},
+
+  -- Minetest Game hoes
+  ["farming:hoe_wood"] = {type = "hoe", uses = 30},
+  ["farming:hoe_stone"] = {type = "hoe", uses = 90},
+  ["farming:hoe_steel"] = {type = "hoe", uses = 200},
+  ["moreores:hoe_mithril"] = {type = "hoe", uses = 1600},
+  ["moreores:hoe_silver"] = {type = "hoe", uses = 380},
+
+  -- MineClone-style hoes (durability roughly matches Minecraft)
+  ["mcl_tools:hoe_wood"] = {type = "hoe", uses = 60},
+  ["mcl_tools:hoe_stone"] = {type = "hoe", uses = 132},
+  ["mcl_tools:hoe_iron"] = {type = "hoe", uses = 251},
+  ["mcl_tools:hoe_gold"] = {type = "hoe", uses = 33},
+  ["mcl_tools:hoe_diamond"] = {type = "hoe", uses = 1562},
+  ["mcl_tools:hoe_netherite"] = {type = "hoe", uses = 2031}
 }
 
 local furnace_node_types = {
@@ -115,29 +144,12 @@ local furnace_node_types = {
 -- such that the given number of uses will break the tool
 local function get_wear_for_uses(uses) return 65535 / (uses - 1) end
 
-local tool_usages = {
-  ["mcl_tools:pick_wood"] = 30,
-  ["mcl_tools:pick_stone"] = 60,
-  ["mcl_tools:pick_iron"] = 180,
-  ["mcl_tools:pick_gold"] = 20,
-  ["mcl_tools:pick_diamond"] = 810,
-  ["default:pick_wood"] = 30,
-  ["default:pick_stone"] = 60,
-  ["default:pick_steel"] = 180,
-  ["default:pick_bronze"] = 180,
-  ["default:pick_mese"] = 540,
-  ["default:pick_diamond"] = 810,
-  ["moreores:pick_mithril"] = 1600,
-  ["moreores:pick_silver"] = 380,
-  ["ethereal:pick_crystal"] = 1200
-}
 local tool_wear_rates = {}
-for i = 1, #supported_tools do
-  local tool = supported_tools[i]
-  local usage = tool_usages[tool]
-  local wear_rate = get_wear_for_uses(usage)
-  tool_wear_rates[tool] = wear_rate
-  -- minetest.debug(tool .. " wear rate " .. wear_rate)
+for tool_name, definition in pairs(supported_tools) do
+  if definition.uses ~= nil then
+    local wear_rate = get_wear_for_uses(definition.uses)
+    tool_wear_rates[tool_name] = wear_rate
+  end
 end
 
 function adabots.map(f, t)
@@ -426,7 +438,7 @@ function TurtleEntity:equip_tool(turtleslot)
   end
   self.toolinv:set_stack("toolmain", 1, stack)
   self.inv:set_stack("main", turtleslot, ItemStack(""))
-  self:add_pickaxe_model()
+  self:add_tool_model()
   return true
 end
 
@@ -439,6 +451,19 @@ function TurtleEntity:getToolInfo()
   local tool_info = minetest.registered_items[tool_name]
   return tool_info
   -- return {"name": tool_name, "level": tool_info["tool_capabilities"]["max_drop_level"]}
+end
+
+function TurtleEntity:getCurrentToolDefinition()
+  local tool_stack = self.toolinv:get_stack("toolmain", 1)
+  if tool_stack == nil or tool_stack:is_empty() then return nil end
+  local tool_name = tool_stack:get_name()
+  return supported_tools[tool_name]
+end
+
+function TurtleEntity:current_tool_is(tool_type)
+  local def = self:getCurrentToolDefinition()
+  if def == nil then return false end
+  return def.type == tool_type
 end
 
 function dump(o)
@@ -647,9 +672,11 @@ function TurtleEntity:move(nodeLocation)
 end
 
 local function get_remaining_uses(tool_name, wear_value)
-  if not is_supported_toolname(tool_name) then return 0 end
-  local total_uses = tool_usages[tool_name]
+  local tool_definition = supported_tools[tool_name]
+  if tool_definition == nil or tool_definition.uses == nil then return 0 end
   local single_use = tool_wear_rates[tool_name]
+  if single_use == nil or single_use == 0 then return 0 end
+  local total_uses = tool_definition.uses
   local spent_uses = round(wear_value / single_use)
   return total_uses - spent_uses
 end
@@ -670,8 +697,7 @@ end
 -- end
 
 function TurtleEntity:pickaxe_can_dig(node)
-  local tool_info = self:getToolInfo()
-  if tool_info == nil then return false end
+  if not self:current_tool_is("pick") then return false end
   return true
   -- for some reason silver is set to hardness 4, above all pickaxes
   -- so nevermind this
@@ -680,16 +706,82 @@ function TurtleEntity:pickaxe_can_dig(node)
   -- return tool_hardness >= node_hardness
 end
 
+local function node_above(pos)
+  return {x = pos.x, y = pos.y + 1, z = pos.z}
+end
+
+local function node_below(pos)
+  return {x = pos.x, y = pos.y - 1, z = pos.z}
+end
+
+local function is_seed_item(item_name)
+  return item_name ~= nil and (string.match(item_name, '^cropocalypse:seed_') ~= nil or string.match(item_name, '^farming:seed_') ~= nil)
+end
+
+local function seed_target_positions(nodeLocation)
+  if nodeLocation == nil then return nil end
+  local target_node = minetest.get_node_or_nil(nodeLocation)
+  if target_node == nil then return nil end
+  if minetest.get_item_group(target_node.name, 'soil') >= 2 then
+    local above = node_above(nodeLocation)
+    local above_node = minetest.get_node_or_nil(above)
+    if above_node == nil then return nil end
+    return nodeLocation, above, target_node, above_node
+  end
+  local below = node_below(nodeLocation)
+  local below_node = minetest.get_node_or_nil(below)
+  if below_node ~= nil and minetest.get_item_group(below_node.name, 'soil') >= 2 then
+    local above_node = minetest.get_node_or_nil(nodeLocation)
+    if above_node == nil then return nil end
+    return below, nodeLocation, below_node, above_node
+  end
+  return nil
+end
+
+function TurtleEntity:hoe_node(nodeLocation, node)
+  if not self:current_tool_is("hoe") then return false end
+
+  local node_def = minetest.registered_nodes[node.name]
+  if node_def == nil then return false end
+
+  if minetest.get_item_group(node.name, "soil") ~= 1 then return false end
+
+  local soil_def = node_def.soil
+  if soil_def == nil or soil_def.dry == nil or soil_def.wet == nil then return false end
+
+  local aboveLocation = node_above(nodeLocation)
+  local above_node = minetest.get_node_or_nil(aboveLocation)
+  if above_node == nil then return false end
+  if above_node.name ~= "air" then return false end
+
+  if not self:ensureEnergyFor(adabots.config.mine_energy_cost) then return false end
+
+  local tilled = override_protection(function ()
+    minetest.set_node(nodeLocation, {name = soil_def.dry})
+    return true
+  end)
+
+  if not tilled then return false end
+  if not self:useEnergy(adabots.config.mine_energy_cost) then return false end
+  self:increment_tool_uses()
+  minetest.sound_play("default_dig_crumbly", {pos = nodeLocation, gain = 0.5}, true)
+  return true
+end
+
 function TurtleEntity:increment_tool_uses()
   local tool_stack = self.toolinv:get_stack("toolmain", 1)
+  if tool_stack == nil then return end
   local table = tool_stack:to_table()
+  if table == nil or table.name == nil then return end
   local wear_increment = tool_wear_rates[table.name]
-  if table.wear > 65535 - wear_increment then
+  if wear_increment == nil then return end
+  local current_wear = table.wear or 0
+  if current_wear > 65535 - wear_increment then
     -- tool is spent
     self.toolinv:set_stack("toolmain", 1, nil)
-    self:remove_pickaxe()
+    self:remove_tool_model()
   else
-    table.wear = table.wear + wear_increment -- must be <= 65535, the max value
+    table.wear = current_wear + wear_increment -- must be <= 65535, the max value
     local new_tool_stack = ItemStack(table)
     self.toolinv:set_stack("toolmain", 1, new_tool_stack)
   end
@@ -730,6 +822,10 @@ function TurtleEntity:mine(nodeLocation)
       end
       return true
     end
+  end
+
+  if self:current_tool_is("hoe") then
+    return self:hoe_node(nodeLocation, node)
   end
 
   -- check pickaxe strong enough
@@ -801,6 +897,36 @@ function TurtleEntity:is_allowed_to_modify(nodeLocation)
   return true
 end
 
+function TurtleEntity:try_place_seed(nodeLocation, stack)
+  if stack == nil then return false end
+  local item_name = stack:get_name()
+  if not is_seed_item(item_name) then return false end
+  local soil_pos, plant_pos, soil_node, plant_node = seed_target_positions(nodeLocation)
+  if soil_pos == nil or plant_pos == nil or soil_node == nil or plant_node == nil then return false end
+  if not self:is_allowed_to_modify(soil_pos) then return false end
+  if not self:is_allowed_to_modify(plant_pos) then return false end
+  local plant_node_def = minetest.registered_nodes[plant_node.name]
+  if plant_node_def == nil then return false end
+  if not plant_node_def.buildable_to then return false end
+  if minetest.get_item_group(plant_node.name, 'plant') ~= 0 then return false end
+  local seed_def = minetest.registered_nodes[item_name]
+  if seed_def == nil then return false end
+  if not self:ensureEnergyFor(adabots.config.build_energy_cost) then return false end
+  local placed = override_protection(function ()
+    minetest.set_node(plant_pos, {name = item_name, param2 = seed_def.place_param2 or 1})
+    if farming and farming.start_seed_timer then
+      farming.start_seed_timer(plant_pos)
+    end
+    minetest.sound_play('default_place_node', {pos = plant_pos, gain = 1.0})
+    return true
+  end)
+  if not placed then return false end
+  if not self:useEnergy(adabots.config.build_energy_cost) then return false end
+  stack:take_item(1)
+  self.inv:set_stack('main', self.selected_slot, stack)
+  return true
+end
+
 function TurtleEntity:build(nodeLocation)
   local stack = self:getTurtleslot(self.selected_slot)
   if stack == nil then
@@ -811,7 +937,13 @@ function TurtleEntity:build(nodeLocation)
   end
   if stack:is_empty() then return false end
   local item_name = stack:get_name()
+  if is_seed_item(item_name) then
+    return self:try_place_seed(nodeLocation, stack)
+  end
   local item_registration = minetest.registered_items[item_name]
+  if item_registration == nil or item_registration.on_place == nil then
+    return false
+  end
   local decoration = get_decoration_from_item(item_name)
   if decoration ~= nil then
     nodeLocation = {
@@ -1773,11 +1905,11 @@ function TurtleEntity:inv_allow_take(inv, listname, index, stack, player)
 end
 
 function TurtleEntity:toolinv_on_put(inv, listname, index, stack, player)
-  self:refresh_pickaxe()
+  self:refresh_tool_entity()
 end
 
 function TurtleEntity:toolinv_on_take(inv, listname, index, stack, player)
-  self:refresh_pickaxe()
+  self:refresh_tool_entity()
 end
 
 -- https://rosettacode.org/wiki/Partial_function_application#Lua
@@ -1850,40 +1982,40 @@ function TurtleEntity:on_activate(staticdata, dtime_s)
   -- Add to turtle list
   adabots.turtles[self.id] = self
 
-  self:add_pickaxe_model()
+  self:add_tool_model()
 end
 
-function TurtleEntity:refresh_pickaxe()
-  self:remove_pickaxe()
-  self:add_pickaxe_model()
+function TurtleEntity:refresh_tool_entity()
+  self:remove_tool_entity()
+  self:add_tool_model()
 end
 
-local function get_pickaxe_entity_name(tool_name)
+local function get_tool_entity_name(tool_name)
   -- mcl_tools:pick_wood => adabots:pick_wood
   -- default:pick_wood => adabots:pick_wood
   return tool_name:gsub("^.*:", "adabots:")
 end
 
-function TurtleEntity:add_pickaxe_model()
+function TurtleEntity:add_tool_model()
   local tool_info = self:getToolInfo()
   if tool_info == nil then return end
   if not is_supported_tool(tool_info) then return end
   local tool_name = tool_info["name"]
   -- minetest.debug("Tool name: " .. tool_name)
-  local pickaxe_entity = get_pickaxe_entity_name(tool_name)
-  self.pickaxe = minetest.add_entity({x = 0, y = 0, z = 0}, pickaxe_entity)
+  local tool_entity = get_tool_entity_name(tool_name)
+  self.tool_entity = minetest.add_entity({x = 0, y = 0, z = 0}, tool_entity)
   local relative_position = {x = 0, y = 0, z = 0}
   local relative_rotation = {x = 0, y = 0, z = 0}
-  self.pickaxe:set_attach(self.object, "", relative_position,
+  self.tool_entity:set_attach(self.object, "", relative_position,
     relative_rotation)
 end
 
-function TurtleEntity:remove_pickaxe()
-  if self.pickaxe ~= nil then self.pickaxe:remove() end
+function TurtleEntity:remove_tool_entity()
+  if self.tool_entity ~= nil then self.tool_entity:remove() end
 end
 
 function TurtleEntity:on_deactivate()
-  self:remove_pickaxe()
+  self:remove_tool_entity()
 end
 
 function TurtleEntity:is_hovering()
@@ -2076,7 +2208,7 @@ function TurtleEntity:on_step(dtime)
     self:sucknode(self:get_pos(), 0)
     -- and maybe listen
     if self.is_listening then
-      self:fetch_adabots_instruction()
+      -- self:fetch_adabots_instruction()
     end
     self.wait_since_last_step = 0
   end
@@ -2865,32 +2997,37 @@ local PickaxeEntity = {
   }
 }
 
-local function set_pickaxe_properties(texture)
-  local entity = deepcopy(PickaxeEntity)
+local HoeEntity = deepcopy(PickaxeEntity)
+HoeEntity.initial_properties.mesh = "hoe.b3d"
+HoeEntity.initial_properties.textures = {"hoe_wood.png"}
+
+local function set_tool_properties(tool_type, texture)
+  local entity = nil
+  if tool_type == "pick" then
+    entity = deepcopy(PickaxeEntity)
+  elseif tool_type == "hoe" then
+    entity = deepcopy(HoeEntity)
+  else
+    minetest.log("error", "[adabots] : unsupported tool_type " .. tool_type)
+    return nil
+  end
   entity["initial_properties"]["textures"] = {texture}
   return entity
 end
 
-register_or_override_entity("adabots:pick_wood",
-  set_pickaxe_properties("pick_wood.png"))
-register_or_override_entity("adabots:pick_stone",
-  set_pickaxe_properties("pick_stone.png"))
-register_or_override_entity("adabots:pick_steel",
-  set_pickaxe_properties("pick_iron.png"))
-register_or_override_entity("adabots:pick_bronze",
-  set_pickaxe_properties("pick_bronze.png"))
-register_or_override_entity("adabots:pick_gold",
-  set_pickaxe_properties("pick_gold.png"))
-register_or_override_entity("adabots:pick_mese",
-  set_pickaxe_properties("pick_mese.png"))
-register_or_override_entity("adabots:pick_diamond",
-  set_pickaxe_properties("pick_diamond.png"))
-register_or_override_entity("adabots:pick_mithril",
-  set_pickaxe_properties("pick_mithril.png"))
-register_or_override_entity("adabots:pick_silver",
-  set_pickaxe_properties("pick_silver.png"))
-register_or_override_entity("adabots:pick_crystal",
-  set_pickaxe_properties("pick_ethereal_crystal.png"))
+local materials = {
+  "wood", "stone", "iron", "steel", "bronze", "gold",
+  "mese", "diamond", "mithril", "silver", "crystal"
+}
+local tools = {"pick", "hoe"}
+
+for _, material in ipairs(materials) do
+  for _, tool_type in ipairs(tools) do
+    local texture_name = tool_type .. "_" .. material .. ".png"
+    register_or_override_entity("adabots:" .. tool_type .. "_" .. material,
+      set_tool_properties(tool_type, texture_name))
+  end
+end
 
 minetest.register_privilege("adabots_override_bot_lock", {
   description = "Can access other player's bots without their permission.",
