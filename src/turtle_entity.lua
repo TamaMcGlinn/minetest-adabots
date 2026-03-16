@@ -779,7 +779,7 @@ function TurtleEntity:increment_tool_uses()
   if current_wear > 65535 - wear_increment then
     -- tool is spent
     self.toolinv:set_stack("toolmain", 1, nil)
-    self:remove_tool_model()
+    self:remove_tool_entity()
   else
     table.wear = current_wear + wear_increment -- must be <= 65535, the max value
     local new_tool_stack = ItemStack(table)
