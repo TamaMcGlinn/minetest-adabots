@@ -25,8 +25,6 @@ Other_Bot : constant Adabots.Turtle := Adabots.Create_Turtle (7113); -- outputs 
 - Detecting if there is a block
 - Selecting an inventory slot
 - Getting items from chests
-
-## Features to Add
-
 - Looking what kind of block there is
 - Crafting
+
